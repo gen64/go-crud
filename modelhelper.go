@@ -58,11 +58,11 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 			dbCol = m.dbColPrefix + "_id"
 		} else if field.Name == "Flags" {
 			dbCol = "flags"
-		} else if field.Name != "Mdl" {
+		} else if field.Name != "Model" {
 			dbCol = m.getUnderscoredName(field.Name)
 		}
 
-		if field.Name != "Mdl" {
+		if field.Name != "Model" {
 			if querySelectCols != "" {
 				querySelectCols += ","
 			}
@@ -85,7 +85,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 			}
 		}
 
-		if field.Name != "Mdl" && field.Name != "ID" && field.Name != "Flags" {
+		if field.Name != "Model" && field.Name != "ID" && field.Name != "Flags" {
 			f0xTagLine := field.Tag.Get("f0x")
 			req, lenmin, lenmax, err := m.parseF0xTagLine(f0xTagLine)
 			if err != nil {
@@ -137,7 +137,7 @@ func (m *ModelHelper) getPluralName(s string) string {
 }
 
 func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, error) {
-	xt := strings.Split(s, " ")
+	xt := strings.SplitN(s, " ", -1)
 	req := false
 	lenmin := -1
 	lenmax := -1
