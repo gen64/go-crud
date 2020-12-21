@@ -14,7 +14,7 @@ import (
 type IMdl interface {
 	IsInitialized() bool
 	SetInitialized(b bool)
-	SetSQLQueriesFromTags(u interface{}) error
+	SetFromTags(u interface{}) error
 }
 
 type Mdl struct {
@@ -26,6 +26,8 @@ type Mdl struct {
 	dbTbl string
 	dbColPrefix string
 	url string
+	reqFields []int
+	lenFields [][3]int
 }
 
 func (m *Mdl) IsInitialized() bool {
@@ -36,7 +38,7 @@ func (m *Mdl) SetInitialized(b bool) {
 	m.initialized = b
 }
 
-func (m *Mdl) SetSQLQueriesFromTags(u interface{}) error {
+func (m *Mdl) SetFromTags(u interface{}) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -47,6 +49,9 @@ func (m *Mdl) SetSQLQueriesFromTags(u interface{}) error {
 	m.dbColPrefix = usName
 	m.url = usPluName
 
+	m.reqFields = make([]int, 0)
+	m.lenFields = make([][3]int, 0)
+
 	querySelectCols := ""
 	queryUpdateCols := ""
 	updateFieldCnt := 0
@@ -56,7 +61,6 @@ func (m *Mdl) SetSQLQueriesFromTags(u interface{}) error {
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
-
 		dbCol := ""
 		if field.Name == "ID" {
 			dbCol = m.dbColPrefix + "_id"
@@ -95,9 +99,12 @@ func (m *Mdl) SetSQLQueriesFromTags(u interface{}) error {
 			if err != nil {
 				return fmt.Errorf("error with parseF0xTagLine: %s", err)
 			}
-			log.Print(req)
-			log.Print(lenmin)
-			log.Print(lenmax)
+			if req {
+				m.reqFields = append(m.reqFields, j)
+			}
+			if lenmin > -1 || lenmax > -1 {
+				m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+			}
 		}
 	}
 
@@ -170,9 +177,13 @@ func (m *Mdl) parseF0xTagLine(s string) (bool, int, int, error) {
 	return req, lenmin, lenmax, nil
 }
 
+func ValidateMdl(mdl IMdl) error {
+	return nil
+}
+
 func SaveMdlToDB(mdl IMdl, conn *sql.DB) error {
 	if !mdl.IsInitialized() {
-		err := mdl.SetSQLQueriesFromTags(mdl)
+		err := mdl.SetFromTags(mdl)
 		if err != nil {
 			return fmt.Errorf("error with SetSQLQueriesFromTags in SaveMdlToDB: %s", err)
 		}
@@ -181,57 +192,10 @@ func SaveMdlToDB(mdl IMdl, conn *sql.DB) error {
 	return nil
 }
 
-/*import (
-	"fmt"
-	"log"
-	"reflect"
-	"regexp"
-	"strconv"
-	"strings"
-)
+func SetMdlFromDB(mdl IMdl, conn *sql.DB, id string) error {
 
-// ParseF0xTagLine parses f0x tag
-
-
-// ValidateMdl loops through fields and validates them
-func ValidateMdl(m interface{}) error {
-	v := reflect.ValueOf(m)
-	i := reflect.Indirect(v)
-	s := i.Type()
-	for j := 0; j < s.NumField(); j++ {
-		field := s.Field(j)
-		valueField := i.Field(j)
-		if field.Name == "Mdl" || field.Name == "ID" || field.Name == "Flags" {
-			continue
-		}
-
-		f0xTagLine := field.Tag.Get("f0x")
-		req, _, lenmin, lenmax, err := ParseF0xTagLine(f0xTagLine)
-		if err != nil {
-			return fmt.Errorf("error with ParseF0xTagLine: %s", err)
-		}
-
-		if valueField.Kind() == reflect.String {
-			if req && valueField.String() == "" {
-				return fmt.Errorf("value req failed")
-			}
-			if lenmin > -1 && len(valueField.String()) < lenmin {
-				return fmt.Errorf("value lenmin failed")
-			}
-			if lenmax > -1 && len(valueField.String()) > lenmax {
-				return fmt.Errorf("value lenmax failed")
-			}
-		}
-	}
-	return nil
 }
 
-// SaveMdl updates the object in the database
-func SaveMdl(m interface{}) error {
-	err := ValidateMdl(m)
-	if err != nil {
-		return fmt.Errorf("validation failed: %s", err)
-	}
-	log.Print(m)
-	return nil
-}*/
+func DeleteMdlFromDB(mdl IMdl, conn *sql.DB) error {
+
+}
