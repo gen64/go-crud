@@ -30,6 +30,22 @@ func NewModelHelper(m IModel) (*ModelHelper, error) {
 	return h, nil
 }
 
+func (m *ModelHelper) GetQueryInsert() string {
+	return m.queryInsert
+}
+
+func (m *ModelHelper) GetQueryUpdateById() string {
+	return m.queryUpdateById
+}
+
+func (m *ModelHelper) GetQuerySelectById() string {
+	return m.querySelectById
+}
+
+func (m *ModelHelper) GetQueryDeleteById() string {
+	return m.queryDeleteById
+}
+
 func (m *ModelHelper) SetFromTags(u interface{}) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
@@ -102,7 +118,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 
 	m.queryDeleteById = "DELETE FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
 	m.querySelectById = "SELECT " + querySelectCols + " FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
-	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ")"
+	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + m.dbColPrefix + "_id"
 	updateFieldCnt++
 	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt)
 	return nil

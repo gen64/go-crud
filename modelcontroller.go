@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
-	"log"
 )
 
 type ModelController struct {
@@ -70,19 +69,27 @@ func (mc *ModelController) Validate(m IModel) (bool, []int, error) {
 }
 
 func (mc *ModelController) SaveToDB(m IModel) error {
-	_, err := mc.GetHelper(m)
+	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
 	}
 
-	b, xi, err := mc.Validate(m)
+	b, _, err := mc.Validate(m)
 	if err != nil {
 		return fmt.Errorf("error with Validate in SaveToDB: %s", err)
 	}
 
-	log.Print(xi)
 	if !b {
 		return fmt.Errorf("error with Validate in SaveToDB")
+	}
+
+	if m.GetID() != 0 {
+		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), mc.GetModelForUpdateById(m)...)
+	} else {
+		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelForInsert(m)...).Scan(mc.GetModelID(m))
+	}
+	if err != nil {
+		return fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
 	}
 	return nil
 }
@@ -101,4 +108,32 @@ func (mc *ModelController) DeleteFromDB(m IModel) error {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
 	}
 	return nil
+}
+
+func (mc *ModelController) GetModelID(u interface{}) interface{} {
+	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
+}
+
+func (mc *ModelController) GetModelForInsert(u interface{}) []interface{} {
+    val := reflect.ValueOf(u).Elem()
+    v := make([]interface{}, val.NumField()-1)
+    for i := 1; i < val.NumField(); i++ {
+        valueField := val.Field(i)
+        v[i-1] = valueField.Addr().Interface()
+    }
+    return v
+}
+
+func (mc *ModelController) GetModelForUpdateById(u interface{}) []interface{} {
+    val := reflect.ValueOf(u).Elem()
+    v := make([]interface{}, val.NumField())
+    for i := 0; i < val.NumField(); i++ {
+        valueField := val.Field(i)
+		j := i-1
+		if i == 0 {
+			j = val.NumField()-1
+		}
+        v[j] = valueField.Addr().Interface()
+    }
+    return v
 }
