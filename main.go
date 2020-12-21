@@ -21,11 +21,14 @@ func main() {
 	}
 	defer conn.Close()
 
+	mc := &ModelController{}
+	mc.AttachDBConn(conn)
 
 	prod := &Product{}
 	prod.Name = "Coffee 1kg"
 	prod.Description = "Package of very good coffee beans"
-	err = SaveMdlToDB(prod, conn)
+
+	err = mc.SaveToDB(prod)
 	if err != nil {
 		log.Fatal(err)
 	}

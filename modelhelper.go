@@ -1,8 +1,6 @@
 package main
 
 import (
-	"database/sql"
-	"log"
 	"fmt"
 	"reflect"
 	"strings"
@@ -11,14 +9,7 @@ import (
 	"unicode"
 )
 
-type IMdl interface {
-	IsInitialized() bool
-	SetInitialized(b bool)
-	SetFromTags(u interface{}) error
-}
-
-type Mdl struct {
-	initialized bool
+type ModelHelper struct {
 	queryInsert string
 	queryUpdateById string
 	querySelectById string
@@ -30,15 +21,16 @@ type Mdl struct {
 	lenFields [][3]int
 }
 
-func (m *Mdl) IsInitialized() bool {
-	return m.initialized
+func NewModelHelper(m IModel) (*ModelHelper, error) {
+	h := &ModelHelper{}
+	err := h.SetFromTags(m)
+	if err != nil {
+		return nil, fmt.Errorf("error with SetFromTags in NewModelHelper: %s", err)
+	}
+	return h, nil
 }
 
-func (m *Mdl) SetInitialized(b bool) {
-	m.initialized = b
-}
-
-func (m *Mdl) SetFromTags(u interface{}) error {
+func (m *ModelHelper) SetFromTags(u interface{}) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -113,11 +105,10 @@ func (m *Mdl) SetFromTags(u interface{}) error {
 	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ")"
 	updateFieldCnt++
 	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt)
-	log.Print(m)
 	return nil
 }
 
-func (m *Mdl) getUnderscoredName(s string) string {
+func (m *ModelHelper) getUnderscoredName(s string) string {
 	o := ""
 	for i, ch := range s {
 		if i == 0 {
@@ -133,7 +124,7 @@ func (m *Mdl) getUnderscoredName(s string) string {
 	return o
 }
 
-func (m *Mdl) getPluralName(s string) string {
+func (m *ModelHelper) getPluralName(s string) string {
 	re := regexp.MustCompile(`y$`)
 	if re.MatchString(s) {
 		return string(re.ReplaceAll([]byte(s), []byte(`ies`)))
@@ -145,7 +136,7 @@ func (m *Mdl) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (m *Mdl) parseF0xTagLine(s string) (bool, int, int, error) {
+func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, error) {
 	xt := strings.Split(s, " ")
 	req := false
 	lenmin := -1
@@ -175,27 +166,4 @@ func (m *Mdl) parseF0xTagLine(s string) (bool, int, int, error) {
 		}
 	}
 	return req, lenmin, lenmax, nil
-}
-
-func ValidateMdl(mdl IMdl) error {
-	return nil
-}
-
-func SaveMdlToDB(mdl IMdl, conn *sql.DB) error {
-	if !mdl.IsInitialized() {
-		err := mdl.SetFromTags(mdl)
-		if err != nil {
-			return fmt.Errorf("error with SetSQLQueriesFromTags in SaveMdlToDB: %s", err)
-		}
-		mdl.SetInitialized(true)
-	}
-	return nil
-}
-
-func SetMdlFromDB(mdl IMdl, conn *sql.DB, id string) error {
-
-}
-
-func DeleteMdlFromDB(mdl IMdl, conn *sql.DB) error {
-
 }
