@@ -64,12 +64,7 @@ func main() {
 		Key: "key",
 		ExpiresAt: time.Now().Add(time.Duration(30) * time.Minute).Unix(),
 		UserID: 0,
-		User: &User {
-			Flags: 1+2+4,
-			Email: "admin@sysg.io",
-			CreatedAt: time.Now().Unix(),
-			ID: 2,
-		},
+		User: user,
 	}
 	err = mc.SaveToDB(session)
 	if err != nil {
