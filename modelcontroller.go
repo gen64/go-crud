@@ -75,6 +75,29 @@ func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 			xi = append(xi, h.reqFields[j])
 			b = false
 		}
+		if valueField.Type().Name() == "int64" && valueField.Int() == 0 {
+			bf := true
+			// Check if field is not a link
+			for l := 0; l < len(h.linkFields); l++ {
+				if h.linkFields[l][0] == h.reqFields[j] {
+					valueLinkField := val.Field(h.linkFields[l][1])
+					// If linked field is nil or linked object ID is 0
+					if valueLinkField.IsNil() {
+						bf = false
+					} else {
+						linkedId := mc.GetModelIDValue(reflect.Indirect(valueLinkField).Addr().Interface())
+						if linkedId == 0 {
+							bf = false
+						}
+					}
+					break
+				}
+			}
+			if !bf {
+				xi = append(xi, h.reqFields[j])
+				b = false
+			}
+		}
 	}
 	for j := 0; j < len(h.lenFields); j++ {
 		valueField := val.Field(h.lenFields[j][0])
@@ -91,6 +114,25 @@ func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 		}
 	}
 	return b, xi, nil
+}
+
+func (mc *ModelController) PopulateLinks(m interface{}) {
+	h, err := mc.GetHelper(m)
+	if err != nil {
+		return
+	}
+
+	val := reflect.ValueOf(m).Elem()
+	for l := 0; l < len(h.linkFields); l++ {
+		valueTargetField := val.Field(h.linkFields[l][0])
+		valueSourceField := val.Field(h.linkFields[l][1])
+		if !valueSourceField.IsNil() {
+			linkedId := mc.GetModelIDValue(reflect.Indirect(valueSourceField).Addr().Interface())
+			if linkedId != 0 {
+				valueTargetField.SetInt(linkedId)
+			}
+		}
+	}
 }
 
 func (mc *ModelController) CreateDBTable(m interface{}) error {
@@ -133,6 +175,8 @@ func (mc *ModelController) SaveToDB(m interface{}) error {
 	if !b {
 		return fmt.Errorf("error with Validate in SaveToDB")
 	}
+
+	mc.PopulateLinks(m)
 
 	if mc.GetModelIDValue(m) != 0 {
 		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)

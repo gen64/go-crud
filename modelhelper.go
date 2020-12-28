@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"regexp"
 	"unicode"
-	"log"
 )
 
 type ModelHelper struct {
@@ -23,6 +22,7 @@ type ModelHelper struct {
 	reqFields        []int
 	lenFields        [][3]int
 	emailFields      []int
+	linkFields       [][2]int
 }
 
 func NewModelHelper(m interface{}) (*ModelHelper, error) {
@@ -71,6 +71,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 
 	m.reqFields = make([]int, 0)
 	m.lenFields = make([][3]int, 0)
+	m.linkFields = make([][2]int, 0)
 
 	queryCreateTableCols := ""
 	querySelectCols := ""
@@ -88,7 +89,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 		}
 
 		f0xTagLine := field.Tag.Get("f0x")
-		req, lenmin, lenmax, err := m.parseF0xTagLine(f0xTagLine)
+		req, lenmin, lenmax, link, err := m.parseF0xTagLine(f0xTagLine)
 		if err != nil {
 			return fmt.Errorf("error with parseF0xTagLine: %s", err)
 		}
@@ -97,6 +98,13 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 		}
 		if lenmin > -1 || lenmax > -1 {
 			m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+		}
+		if link != "" {
+			linkedField, linkedFound := s.FieldByName(link)
+			if !linkedFound {
+				return fmt.Errorf("invalid link %s", link)
+			}
+			m.linkFields = append(m.linkFields, [2]int{j, linkedField.Index[0]})
 		}
 
 		dbCol := ""
@@ -157,7 +165,6 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + m.dbColPrefix + "_id"
 	updateFieldCnt++
 	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt)
-	log.Print(m.queryInsert)
 	return nil
 }
 
@@ -195,11 +202,12 @@ func (m *ModelHelper) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, error) {
+func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, string, error) {
 	xt := strings.SplitN(s, " ", -1)
 	req := false
 	lenmin := -1
 	lenmax := -1
+	link := ""
 	if len(xt) > 0 {
 		for _, t := range xt {
 			if t == "req" {
@@ -210,10 +218,10 @@ func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, error) {
 					lStr := strings.Replace(t, sl+":", "", 1)
 					matched, err := regexp.Match(`^[0-9]+$`, []byte(lStr))
 					if err != nil {
-						return false, 0, 0, fmt.Errorf("error with regexp.Match on " + sl)
+						return false, 0, 0, "", fmt.Errorf("error with regexp.Match on " + sl)
 					}
 					if !matched {
-						return false, 0, 0, fmt.Errorf(sl + " has invalid value")
+						return false, 0, 0, "", fmt.Errorf(sl + " has invalid value")
 					}
 					if sl == "lenmin" {
 						lenmin, _ = strconv.Atoi(lStr)
@@ -222,7 +230,18 @@ func (m *ModelHelper) parseF0xTagLine(s string) (bool, int, int, error) {
 					}
 				}
 			}
+			if strings.HasPrefix(t, "link:") {
+				lStr := strings.Replace(t, "link:", "", 1)
+				matched, err := regexp.Match(`^[a-zA-Z0-9]+$`, []byte(lStr))
+				if err != nil {
+					return false, 0, 0, "", fmt.Errorf("error with regexp.Match on link")
+				}
+				if !matched {
+					return false, 0, 0, "", fmt.Errorf("link has invalid value")
+				}
+				link = lStr
+			}
 		}
 	}
-	return req, lenmin, lenmax, nil
+	return req, lenmin, lenmax, link, nil
 }

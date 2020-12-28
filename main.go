@@ -59,6 +59,23 @@ func main() {
 		log.Printf("Error with SaveToDB on user: %s", err)
 	}
 
+	session := &Session {
+		Flags: 1+2,
+		Key: "key",
+		ExpiresAt: time.Now().Add(time.Duration(30) * time.Minute).Unix(),
+		UserID: 0,
+		User: &User {
+			Flags: 1+2+4,
+			Email: "admin@sysg.io",
+			CreatedAt: time.Now().Unix(),
+			ID: 2,
+		},
+	}
+	err = mc.SaveToDB(session)
+	if err != nil {
+		log.Printf("Error with SaveToDB on session: %s", err)
+	}
+
 	/*// Add data
 	blogCategoryGeneral := &BlogCategory{}
 	blogCategoryGeneral.Name = "General"
