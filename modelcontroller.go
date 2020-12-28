@@ -8,14 +8,19 @@ import (
 
 type ModelController struct {
 	dbConn *sql.DB
+	dbTablePrefix string
 	modelHelpers map[string]*ModelHelper
+}
+
+func (mc *ModelController) SetDBTablePrefix(p string) {
+	mc.dbTablePrefix = p
 }
 
 func (mc *ModelController) AttachDBConn(db *sql.DB) {
 	mc.dbConn = db
 }
 
-func (mc *ModelController) GetHelper(m IModel) (*ModelHelper, error) {
+func (mc *ModelController) GetHelper(m interface{}) (*ModelHelper, error) {
 	v := reflect.ValueOf(m)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -34,7 +39,27 @@ func (mc *ModelController) GetHelper(m IModel) (*ModelHelper, error) {
 	return mc.modelHelpers[n], nil
 }
 
-func (mc *ModelController) Validate(m IModel) (bool, []int, error) {
+func (mc *ModelController) DropDBTables(xm ...interface{}) error {
+	for _, m := range xm {
+		err := mc.DropDBTable(m)
+		if err != nil {
+			return fmt.Errorf("error with DropDBTable: %s", err)
+		}
+	}
+	return nil
+}
+
+func (mc *ModelController) CreateDBTables(xm ...interface{}) error {
+	for _, m := range xm {
+		err := mc.CreateDBTable(m)
+		if err != nil {
+			return fmt.Errorf("error with CreateDBTable: %s", err)
+		}
+	}
+	return nil
+}
+
+func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 	xi := []int{}
 	b := true
 
@@ -68,7 +93,33 @@ func (mc *ModelController) Validate(m IModel) (bool, []int, error) {
 	return b, xi, nil
 }
 
-func (mc *ModelController) SaveToDB(m IModel) error {
+func (mc *ModelController) CreateDBTable(m interface{}) error {
+	h, err := mc.GetHelper(m)
+	if err != nil {
+		return fmt.Errorf("error with GetHelper in CreateDBTable: %s", err)
+	}
+
+	_, err = mc.dbConn.Exec(h.GetQueryCreateTable())
+	if err != nil {
+		return fmt.Errorf("error with db.Exec in CreateDBTable: %s", err)
+	}
+	return nil
+}
+
+func (mc *ModelController) DropDBTable(m interface{}) error {
+	h, err := mc.GetHelper(m)
+	if err != nil {
+		return fmt.Errorf("error with GetHelper in DropDBTable: %s", err)
+	}
+
+	_, err = mc.dbConn.Exec(h.GetQueryDropTable())
+	if err != nil {
+		return fmt.Errorf("error with db.Exec in DropDBTable: %s", err)
+	}
+	return nil
+}
+
+func (mc *ModelController) SaveToDB(m interface{}) error {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
@@ -83,10 +134,10 @@ func (mc *ModelController) SaveToDB(m IModel) error {
 		return fmt.Errorf("error with Validate in SaveToDB")
 	}
 
-	if m.GetID() != 0 {
-		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), mc.GetModelForUpdateById(m)...)
+	if mc.GetModelIDValue(m) != 0 {
+		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)
 	} else {
-		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelForInsert(m)...).Scan(mc.GetModelID(m))
+		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
 	}
 	if err != nil {
 		return fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
@@ -94,7 +145,7 @@ func (mc *ModelController) SaveToDB(m IModel) error {
 	return nil
 }
 
-func (mc *ModelController) SetFromDB(m IModel, id string) error {
+func (mc *ModelController) SetFromDB(m interface{}, id string) error {
 	_, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
@@ -102,7 +153,7 @@ func (mc *ModelController) SetFromDB(m IModel, id string) error {
 	return nil
 }
 
-func (mc *ModelController) DeleteFromDB(m IModel) error {
+func (mc *ModelController) DeleteFromDB(m interface{}) error {
 	_, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
@@ -110,30 +161,23 @@ func (mc *ModelController) DeleteFromDB(m IModel) error {
 	return nil
 }
 
-func (mc *ModelController) GetModelID(u interface{}) interface{} {
+func (mc *ModelController) GetModelIDInterface(u interface{}) interface{} {
 	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
 }
 
-func (mc *ModelController) GetModelForInsert(u interface{}) []interface{} {
-    val := reflect.ValueOf(u).Elem()
-    v := make([]interface{}, val.NumField()-1)
-    for i := 1; i < val.NumField(); i++ {
-        valueField := val.Field(i)
-        v[i-1] = valueField.Addr().Interface()
-    }
-    return v
+func (mc *ModelController) GetModelIDValue(u interface{}) int64 {
+	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
 }
 
-func (mc *ModelController) GetModelForUpdateById(u interface{}) []interface{} {
+func (mc *ModelController) GetModelFieldInterfaces(u interface{}) []interface{} {
     val := reflect.ValueOf(u).Elem()
-    v := make([]interface{}, val.NumField())
-    for i := 0; i < val.NumField(); i++ {
+    var v []interface{}
+    for i := 1; i < val.NumField(); i++ {
         valueField := val.Field(i)
-		j := i-1
-		if i == 0 {
-			j = val.NumField()-1
+		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.String {
+			continue
 		}
-        v[j] = valueField.Addr().Interface()
+        v = append(v, valueField.Addr().Interface())
     }
     return v
 }

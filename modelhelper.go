@@ -7,27 +7,39 @@ import (
 	"strconv"
 	"regexp"
 	"unicode"
+	"log"
 )
 
 type ModelHelper struct {
-	queryInsert string
-	queryUpdateById string
-	querySelectById string
-	queryDeleteById string
-	dbTbl string
-	dbColPrefix string
-	url string
-	reqFields []int
-	lenFields [][3]int
+	queryDropTable   string
+	queryCreateTable string
+	queryInsert      string
+	queryUpdateById  string
+	querySelectById  string
+	queryDeleteById  string
+	dbTbl            string
+	dbColPrefix      string
+	url              string
+	reqFields        []int
+	lenFields        [][3]int
+	emailFields      []int
 }
 
-func NewModelHelper(m IModel) (*ModelHelper, error) {
+func NewModelHelper(m interface{}) (*ModelHelper, error) {
 	h := &ModelHelper{}
 	err := h.SetFromTags(m)
 	if err != nil {
 		return nil, fmt.Errorf("error with SetFromTags in NewModelHelper: %s", err)
 	}
 	return h, nil
+}
+
+func (m *ModelHelper) GetQueryDropTable() string {
+	return m.queryDropTable
+}
+
+func (m *ModelHelper) GetQueryCreateTable() string {
+	return m.queryCreateTable
 }
 
 func (m *ModelHelper) GetQueryInsert() string {
@@ -60,6 +72,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 	m.reqFields = make([]int, 0)
 	m.lenFields = make([][3]int, 0)
 
+	queryCreateTableCols := ""
 	querySelectCols := ""
 	queryUpdateCols := ""
 	updateFieldCnt := 0
@@ -69,73 +82,103 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
+
+		if field.Type.Kind() != reflect.Int64 && field.Type.Kind() != reflect.String {
+			continue
+		}
+
+		f0xTagLine := field.Tag.Get("f0x")
+		req, lenmin, lenmax, err := m.parseF0xTagLine(f0xTagLine)
+		if err != nil {
+			return fmt.Errorf("error with parseF0xTagLine: %s", err)
+		}
+		if req {
+			m.reqFields = append(m.reqFields, j)
+		}
+		if lenmin > -1 || lenmax > -1 {
+			m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+		}
+
 		dbCol := ""
 		if field.Name == "ID" {
 			dbCol = m.dbColPrefix + "_id"
 		} else if field.Name == "Flags" {
-			dbCol = "flags"
-		} else if field.Name != "Model" {
+			dbCol = m.dbColPrefix + "_flags"
+		} else {
 			dbCol = m.getUnderscoredName(field.Name)
 		}
 
-		if field.Name != "Model" {
-			if querySelectCols != "" {
-				querySelectCols += ","
-			}
-			querySelectCols += dbCol
-			if field.Name != "ID" {
-				updateFieldCnt++
-				if queryUpdateCols != "" {
-					queryUpdateCols += ","
-				}
-				queryUpdateCols += dbCol + "=$" + strconv.Itoa(updateFieldCnt)
-				insertFieldCnt++
-				if queryInsertCols != "" {
-					queryInsertCols += ","
-				}
-				queryInsertCols += dbCol
-				if queryInsertVals != "" {
-					queryInsertVals += ","
-				}
-				queryInsertVals += "$" + strconv.Itoa(insertFieldCnt)
+		dbColParams := ""
+		if field.Name == "ID" {
+			dbColParams = "SERIAL PRIMARY KEY"
+		} else if field.Name == "Flags" {
+			dbColParams = "BIGINT"
+		} else {
+			switch field.Type.String() {
+			case "string":
+				dbColParams = "VARCHAR(255)"
+			case "int64":
+				dbColParams = "BIGINT"
+			default:
+				dbColParams = "VARCHAR(255)"
 			}
 		}
 
-		if field.Name != "Model" && field.Name != "ID" && field.Name != "Flags" {
-			f0xTagLine := field.Tag.Get("f0x")
-			req, lenmin, lenmax, err := m.parseF0xTagLine(f0xTagLine)
-			if err != nil {
-				return fmt.Errorf("error with parseF0xTagLine: %s", err)
+		if queryCreateTableCols != "" {
+			queryCreateTableCols += ", "
+		}
+		queryCreateTableCols += dbCol + " " + dbColParams
+		if querySelectCols != "" {
+			querySelectCols += ", "
+		}
+		querySelectCols += dbCol
+		if field.Name != "ID" {
+			updateFieldCnt++
+			if queryUpdateCols != "" {
+				queryUpdateCols += ","
 			}
-			if req {
-				m.reqFields = append(m.reqFields, j)
+			queryUpdateCols += dbCol + "=$" + strconv.Itoa(updateFieldCnt)
+			insertFieldCnt++
+			if queryInsertCols != "" {
+				queryInsertCols += ","
 			}
-			if lenmin > -1 || lenmax > -1 {
-				m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+			queryInsertCols += dbCol
+			if queryInsertVals != "" {
+				queryInsertVals += ","
 			}
+			queryInsertVals += "$" + strconv.Itoa(insertFieldCnt)
 		}
 	}
 
+	m.queryDropTable = "DROP TABLE IF EXISTS " + m.dbTbl
+	m.queryCreateTable = "CREATE TABLE " + m.dbTbl + " (" + queryCreateTableCols + ")"
 	m.queryDeleteById = "DELETE FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
 	m.querySelectById = "SELECT " + querySelectCols + " FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
 	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + m.dbColPrefix + "_id"
 	updateFieldCnt++
 	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt)
+	log.Print(m.queryInsert)
 	return nil
 }
 
 func (m *ModelHelper) getUnderscoredName(s string) string {
 	o := ""
+	var prev rune
 	for i, ch := range s {
 		if i == 0 {
 			o += strings.ToLower(string(ch))
 		} else {
 			if unicode.IsUpper(ch) {
-				o += "_" + strings.ToLower(string(ch))
+				if prev == 'I' && ch == 'D' {
+					o += strings.ToLower(string(ch))
+				} else {
+					o += "_" + strings.ToLower(string(ch))
+				}
 			} else {
 				o += string(ch)
 			}
 		}
+		prev = ch
 	}
 	return o
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 )
 
 func main() {
@@ -23,13 +24,72 @@ func main() {
 
 	mc := &ModelController{}
 	mc.AttachDBConn(conn)
+	mc.SetDBTablePrefix("f0x_")
 
-	prod := &Product{}
-	prod.Name = "Coffee 1kg"
-	prod.Description = "Package of very good coffee beans"
+	models := []interface{}{
+		&User{}, &Session{},
+	}
 
-	err = mc.SaveToDB(prod)
+	// Drop all structure
+	err = mc.DropDBTables(models...)
+	if err != nil {
+		log.Printf("Error with DropAllDBTables: %s", err)
+	}
+
+	// Create structure
+	err = mc.CreateDBTables(models...)
+	if err != nil {
+		log.Printf("Error with CreateTables: %s", err)
+	}
+
+	// Add data
+	user := &User{
+		Flags: 1+2+4,
+		Email: "admin@sysg.io",
+		CreatedAt: time.Now().Unix(),
+	}
+	err = mc.SaveToDB(user)
+	if err != nil {
+		log.Printf("Error with SaveToDB on user: %s", err)
+	}
+
+	user.Flags = 1+2+4+8
+	err = mc.SaveToDB(user)
+	if err != nil {
+		log.Printf("Error with SaveToDB on user: %s", err)
+	}
+
+	/*// Add data
+	blogCategoryGeneral := &BlogCategory{}
+	blogCategoryGeneral.Name = "General"
+	blogCategoryGeneral.BlogPosts = []*BlogPost{
+		&BlogPost{
+			Title: "Welcome to my site",
+			Content: "This is my first post in here",
+		},
+		&BlogPost{
+			Title: "Second post",
+			Content: "I'm happy to announce that my blog engine works"
+		}
+	}
+	err = mc.SaveToDB(blogCategoryGeneral)
+	if err != nil {
+		log.Errorf("Error with SaveToDB on blogCategoryGeneral: %s", err)
+	}
+
+	blogCategoryDevops := &BlogCategory{}
+	blogCategoryDevops.Name = "Devops"
+	err = mc.SaveToDB(blogCategoryDevops)
+	if err != nil {
+		log.Errorf("Error with SaveToDB on blogCategoryDevops: %s", err)
+	}
+
+	blogPostDevops := &BlogPost{}
+	blogPostDevops.Title = "Devops post"
+	blogPostDevops.Content = "This one is a bit more technical"
+	blogPostDevops.BlogCategoryID = blogCategoryDevops.GetID()
+	err = mc.SaveToDB(blogPostDevops)
 	if err != nil {
 		log.Fatal(err)
-	}
+	}*/
 }
