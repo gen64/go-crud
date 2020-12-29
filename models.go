@@ -10,8 +10,6 @@ type User struct {
 	CreatedByUserID    int64  `json:"created_by_user_id" f0x:"link:CreatedByUser"`
 
 	CreatedByUser      *User  `json:"user,omit_empty"`
-
-	Profile            *UserProfile `json:"profile,omit_empty" f0x:"join:User:UserID"`
 }
 
 type Session struct {

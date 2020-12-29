@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 )
 
 type ModelController struct {
@@ -190,18 +191,42 @@ func (mc *ModelController) SaveToDB(m interface{}) error {
 }
 
 func (mc *ModelController) SetFromDB(m interface{}, id string) error {
-	_, err := mc.GetHelper(m)
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return fmt.Errorf("error with strconv.Atoi in SetFromDB: %s", err)
+	}
+
+	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
+	}
+
+	err = mc.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), mc.GetModelIDInterface(m)), mc.GetModelFieldInterfaces(m)...)...)
+	switch {
+	case err == sql.ErrNoRows:
+		mc.ResetFields(m)
+		return nil
+	case err != nil:
+		return fmt.Errorf("error with db.QueryRow in SetFromDB: %s", err)
+	default:
+		return nil
 	}
 	return nil
 }
 
 func (mc *ModelController) DeleteFromDB(m interface{}) error {
-	_, err := mc.GetHelper(m)
+	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
 	}
+	if mc.GetModelIDValue(m) == 0 {
+		return nil
+	}
+	_, err = mc.dbConn.Exec(h.GetQueryDeleteById(), mc.GetModelIDInterface(m))
+	if err != nil {
+		return fmt.Errorf("error with db.Exec in DeleteFromDB: %s", err)
+	}
+	mc.ResetFields(m)
 	return nil
 }
 
@@ -224,4 +249,20 @@ func (mc *ModelController) GetModelFieldInterfaces(u interface{}) []interface{} 
         v = append(v, valueField.Addr().Interface())
     }
     return v
+}
+
+func (mc *ModelController) ResetFields(u interface{}) {
+	val := reflect.ValueOf(u).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		valueField := val.Field(i)
+		if valueField.Kind() == reflect.Ptr {
+			valueField.Set(reflect.Zero(valueField.Type()))
+		}
+		if valueField.Kind() == reflect.Int64 {
+			valueField.SetInt(0)
+		}
+		if valueField.Kind() == reflect.String {
+			valueField.SetString("")
+		}
+	}
 }

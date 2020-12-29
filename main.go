@@ -71,6 +71,25 @@ func main() {
 		log.Printf("Error with SaveToDB on session: %s", err)
 	}
 
+	sessionCopy := &Session {}
+	err = mc.SetFromDB(sessionCopy, "1")
+	if err != nil {
+		log.Printf("Error with SetFromDB on sessionCopy: %s", err)
+	}
+	log.Print(sessionCopy)
+
+	err = mc.DeleteFromDB(session)
+	if err != nil {
+		log.Printf("Error with DeleteFromDB on session: %s", err)
+	}
+
+	err = mc.DeleteFromDB(user)
+	if err != nil {
+		log.Printf("Error with DeleteFromDB on user: %s", err)
+	}
+
+	log.Print(session)
+
 	/*// Add data
 	blogCategoryGeneral := &BlogCategory{}
 	blogCategoryGeneral.Name = "General"
