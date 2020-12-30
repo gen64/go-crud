@@ -48,13 +48,13 @@ func main() {
 		Email: "admin@sysg.io",
 		CreatedAt: time.Now().Unix(),
 	}
-	err = mc.SaveToDB(user)
+	_, err = mc.SaveToDB(user)
 	if err != nil {
 		log.Printf("Error with SaveToDB on user: %s", err)
 	}
 
 	user.Flags = 1+2+4+8
-	err = mc.SaveToDB(user)
+	_, err = mc.SaveToDB(user)
 	if err != nil {
 		log.Printf("Error with SaveToDB on user: %s", err)
 	}
@@ -66,7 +66,7 @@ func main() {
 		UserID: 0,
 		User: user,
 	}
-	err = mc.SaveToDB(session)
+	_, err = mc.SaveToDB(session)
 	if err != nil {
 		log.Printf("Error with SaveToDB on session: %s", err)
 	}
@@ -76,7 +76,6 @@ func main() {
 	if err != nil {
 		log.Printf("Error with SetFromDB on sessionCopy: %s", err)
 	}
-	log.Print(sessionCopy)
 
 	err = mc.DeleteFromDB(session)
 	if err != nil {
@@ -88,39 +87,18 @@ func main() {
 		log.Printf("Error with DeleteFromDB on user: %s", err)
 	}
 
-	log.Print(session)
-
-	/*// Add data
-	blogCategoryGeneral := &BlogCategory{}
-	blogCategoryGeneral.Name = "General"
-	blogCategoryGeneral.BlogPosts = []*BlogPost{
-		&BlogPost{
-			Title: "Welcome to my site",
-			Content: "This is my first post in here",
-		},
-		&BlogPost{
-			Title: "Second post",
-			Content: "I'm happy to announce that my blog engine works"
-		}
+	sth := &Something {
+		Email: "mg@gen64.pl",
+		Age: 19,
+		Price: 5,
+		CurrencyRate: 20,
+		PostCode: "32-600",
 	}
-	err = mc.SaveToDB(blogCategoryGeneral)
-	if err != nil {
-		log.Errorf("Error with SaveToDB on blogCategoryGeneral: %s", err)
-	}
+	b, fields, err := mc.Validate(sth)
+	log.Print(b)
+	log.Print(fields)
 
-	blogCategoryDevops := &BlogCategory{}
-	blogCategoryDevops.Name = "Devops"
-	err = mc.SaveToDB(blogCategoryDevops)
-	if err != nil {
-		log.Errorf("Error with SaveToDB on blogCategoryDevops: %s", err)
-	}
-
-	blogPostDevops := &BlogPost{}
-	blogPostDevops.Title = "Devops post"
-	blogPostDevops.Content = "This one is a bit more technical"
-	blogPostDevops.BlogCategoryID = blogCategoryDevops.GetID()
-	err = mc.SaveToDB(blogPostDevops)
-	if err != nil {
-		log.Fatal(err)
-	}*/
+	// userHandler := mc.CreateHTTPHandler(user)
+	// sessionHandler := mc.CreateHTTPHandler(sessionHandler)
+	// mc.AttachCRUDL(http object, user) -> http.HandleFunc ...
 }

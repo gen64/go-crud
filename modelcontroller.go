@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"regexp"
 )
 
 type ModelController struct {
@@ -76,6 +77,10 @@ func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 			xi = append(xi, h.reqFields[j])
 			b = false
 		}
+		if valueField.Type().Name() == "int" && valueField.Int() == 0 {
+			xi = append(xi, h.reqFields[j])
+			b = false
+		}
 		if valueField.Type().Name() == "int64" && valueField.Int() == 0 {
 			bf := true
 			// Check if field is not a link
@@ -111,6 +116,41 @@ func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 		}
 		if h.lenFields[j][2] > -1 && len(valueField.String()) > h.lenFields[j][2] {
 			xi = append(xi, h.lenFields[j][0])
+			b = false
+		}
+	}
+	for j := 0; j < len(h.valFields); j++ {
+		valueField := val.Field(h.valFields[j][0])
+		if valueField.Type().Name() != "int" && valueField.Type().Name() != "int64" {
+			continue
+		}
+		if h.valFields[j][1] > -1 && valueField.Int() < int64(h.valFields[j][1]) {
+			xi = append(xi, h.valFields[j][0])
+			b = false
+		}
+		if h.valFields[j][2] > -1 && valueField.Int() > int64(h.valFields[j][2]) {
+			xi = append(xi, h.valFields[j][0])
+			b = false
+		}
+	}
+	for j := 0; j < len(h.emailFields); j++ {
+		valueField := val.Field(h.emailFields[j])
+		if valueField.Type().Name() != "string" {
+			continue
+		}
+		var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+		if !emailRegex.MatchString(valueField.String()) {
+			xi = append(xi, h.emailFields[j])
+			b = false
+		}
+	}
+	for k, v := range h.regexpFields {
+		valueField := val.Field(k)
+		if valueField.Type().Name() != "string" {
+			continue
+		}
+		if !v.MatchString(valueField.String()) {
+			xi = append(xi, k)
 			b = false
 		}
 	}
@@ -162,19 +202,19 @@ func (mc *ModelController) DropDBTable(m interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) SaveToDB(m interface{}) error {
+func (mc *ModelController) SaveToDB(m interface{}) (int64, error) {
 	h, err := mc.GetHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
+		return 0, fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
 	}
 
 	b, _, err := mc.Validate(m)
 	if err != nil {
-		return fmt.Errorf("error with Validate in SaveToDB: %s", err)
+		return 0, fmt.Errorf("error with Validate in SaveToDB: %s", err)
 	}
 
 	if !b {
-		return fmt.Errorf("error with Validate in SaveToDB")
+		return 0, fmt.Errorf("error with Validate in SaveToDB")
 	}
 
 	mc.PopulateLinks(m)
@@ -185,9 +225,9 @@ func (mc *ModelController) SaveToDB(m interface{}) error {
 		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
 	}
 	if err != nil {
-		return fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
+		return 0, fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
 	}
-	return nil
+	return mc.GetModelIDValue(m), nil
 }
 
 func (mc *ModelController) SetFromDB(m interface{}, id string) error {
