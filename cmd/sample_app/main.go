@@ -1,12 +1,15 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
-	// "time"
-	"net/http"
+	"time"
 	"github.com/gen64/go-crudl"
+	"net/http"
+
+	_ "github.com/lib/pq"
 )
 
 func main() {
@@ -16,15 +19,23 @@ func main() {
 	}
 
 	cfg := NewConfig(os.Args[1])
-	oDB := NewDB(cfg)
 
-	conn, err := oDB.GetConn()
+	conn, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPass, cfg.DBName))
 	if err != nil {
 		panic(err)
 	}
+	conn.SetConnMaxLifetime(time.Minute * 3)
+	conn.SetMaxOpenConns(50)
+	conn.SetMaxIdleConns(30)
+
+	err = conn.Ping()
+	if err != nil {
+		panic(err)
+	}
+
 	defer conn.Close()
 
-	mc := &crudl.Controller{}
+	mc := crudl.NewController()
 	mc.AttachDBConn(conn)
 	mc.SetDBTablePrefix("f0x_")
 
@@ -46,63 +57,6 @@ func main() {
 	if err != nil {
 		log.Printf("Error with CreateTables: %s", err)
 	}
-
-	/*
-	// Add data
-	user := &User{
-		Flags: 1+2+4,
-		Email: "admin@sysg.io",
-		CreatedAt: time.Now().Unix(),
-	}
-	_, err = mc.SaveToDB(user)
-	if err != nil {
-		log.Printf("Error with SaveToDB on user: %s", err)
-	}
-
-	user.Flags = 1+2+4+8
-	_, err = mc.SaveToDB(user)
-	if err != nil {
-		log.Printf("Error with SaveToDB on user: %s", err)
-	}
-
-	session := &Session {
-		Flags: 1+2,
-		Key: "key",
-		ExpiresAt: time.Now().Add(time.Duration(30) * time.Minute).Unix(),
-		UserID: 0,
-		User: user,
-	}
-	_, err = mc.SaveToDB(session)
-	if err != nil {
-		log.Printf("Error with SaveToDB on session: %s", err)
-	}
-
-	sessionCopy := &Session {}
-	err = mc.SetFromDB(sessionCopy, "1")
-	if err != nil {
-		log.Printf("Error with SetFromDB on sessionCopy: %s", err)
-	}
-
-	err = mc.DeleteFromDB(session)
-	if err != nil {
-		log.Printf("Error with DeleteFromDB on session: %s", err)
-	}
-
-	err = mc.DeleteFromDB(user)
-	if err != nil {
-		log.Printf("Error with DeleteFromDB on user: %s", err)
-	}
-
-	sth := &Something {
-		Email: "mg@gen64.pl",
-		Age: 19,
-		Price: 5,
-		CurrencyRate: 20,
-		PostCode: "32-600",
-	}
-	b, fields, err := mc.Validate(sth)
-	log.Print(b)
-	log.Print(fields)*/
 
 	http.HandleFunc("/users/", mc.GetHTTPHandler(user, "/users/"))
 	log.Fatal(http.ListenAndServe(":9001", nil))

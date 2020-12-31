@@ -2,33 +2,43 @@ package crudl
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"reflect"
-	"strconv"
-	"regexp"
-	"net/http"
-	"strings"
 	"io/ioutil"
 	"log"
-	"encoding/json"
+	"net/http"
+	"reflect"
+	"regexp"
 	"runtime"
+	"strconv"
+	"strings"
 )
 
+// Controller is main component that manages database storage for structs and generates CRUDL HTTP handlers
 type Controller struct {
-	dbConn *sql.DB
+	dbConn        *sql.DB
 	dbTablePrefix string
-	modelHelpers map[string]*Helper
+	modelHelpers  map[string]*Helper
 }
 
+// NewController returns new Controller struct
+func NewController() (*Controller) {
+	c := &Controller{}
+	return c
+}
+
+// SetDBTablePrefix sets a prefix for table names in the storage database, eg. 'app1_'
 func (mc *Controller) SetDBTablePrefix(p string) {
 	mc.dbTablePrefix = p
 }
 
+// AttachDBConn is required to be called just after Controller is initialized. It attaches database connection
 func (mc *Controller) AttachDBConn(db *sql.DB) {
 	mc.dbConn = db
 }
 
-func (mc *Controller) GetHelper(m interface{}) (*Helper, error) {
+// getHelper returns a special Helper struct that is assigned to every struct type
+func (mc *Controller) getHelper(m interface{}) (*Helper, error) {
 	v := reflect.ValueOf(m)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -40,13 +50,14 @@ func (mc *Controller) GetHelper(m interface{}) (*Helper, error) {
 	if mc.modelHelpers[n] == nil {
 		h, err := NewHelper(m)
 		if err != nil {
-			return nil, fmt.Errorf("error with NewHelper in GetHelper: %s", err)
+			return nil, fmt.Errorf("error with NewHelper in getHelper: %s", err)
 		}
 		mc.modelHelpers[n] = h
 	}
 	return mc.modelHelpers[n], nil
 }
 
+// DropDBTables drop tables in the database for specified structs
 func (mc *Controller) DropDBTables(xm ...interface{}) error {
 	for _, m := range xm {
 		err := mc.DropDBTable(m)
@@ -57,6 +68,7 @@ func (mc *Controller) DropDBTables(xm ...interface{}) error {
 	return nil
 }
 
+// CreateDBTables creates tables in the database for specified structs
 func (mc *Controller) CreateDBTables(xm ...interface{}) error {
 	for _, m := range xm {
 		err := mc.CreateDBTable(m)
@@ -67,13 +79,14 @@ func (mc *Controller) CreateDBTables(xm ...interface{}) error {
 	return nil
 }
 
+// Validate checks values of struct fields; returns bool if they are valid and list of names of invalid fields
 func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 	xi := []int{}
 	b := true
 
-	h, err := mc.GetHelper(m)
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return false, xi, fmt.Errorf("error with GetHelper in Validate: %s", err)
+		return false, xi, fmt.Errorf("error with getHelper in Validate: %s", err)
 	}
 
 	val := reflect.ValueOf(m).Elem()
@@ -163,8 +176,9 @@ func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 	return b, xi, nil
 }
 
-func (mc *Controller) PopulateLinks(m interface{}) {
-	h, err := mc.GetHelper(m)
+// populateLinks gets ID of linked struct and sets it to apriopriate ID field (int64) of original struct
+func (mc *Controller) populateLinks(m interface{}) {
+	h, err := mc.getHelper(m)
 	if err != nil {
 		return
 	}
@@ -182,10 +196,11 @@ func (mc *Controller) PopulateLinks(m interface{}) {
 	}
 }
 
+// CreateDBTable creates database table for specified struct
 func (mc *Controller) CreateDBTable(m interface{}) error {
-	h, err := mc.GetHelper(m)
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in CreateDBTable: %s", err)
+		return fmt.Errorf("error with getHelper in CreateDBTable: %s", err)
 	}
 
 	_, err = mc.dbConn.Exec(h.GetQueryCreateTable())
@@ -195,10 +210,11 @@ func (mc *Controller) CreateDBTable(m interface{}) error {
 	return nil
 }
 
+// DropDBTable drops database table for specified struct
 func (mc *Controller) DropDBTable(m interface{}) error {
-	h, err := mc.GetHelper(m)
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in DropDBTable: %s", err)
+		return fmt.Errorf("error with getHelper in DropDBTable: %s", err)
 	}
 
 	_, err = mc.dbConn.Exec(h.GetQueryDropTable())
@@ -208,10 +224,11 @@ func (mc *Controller) DropDBTable(m interface{}) error {
 	return nil
 }
 
-func (mc *Controller) SaveToDB(m interface{}) (error) {
-	h, err := mc.GetHelper(m)
+// SaveToDB takes struct and saves it to database; calls either INSERT or UPDATE
+func (mc *Controller) SaveToDB(m interface{}) error {
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
+		return fmt.Errorf("error with getHelper in SaveToDB: %s", err)
 	}
 
 	b, _, err := mc.Validate(m)
@@ -223,7 +240,7 @@ func (mc *Controller) SaveToDB(m interface{}) (error) {
 		return fmt.Errorf("error with Validate in SaveToDB")
 	}
 
-	mc.PopulateLinks(m)
+	mc.populateLinks(m)
 
 	if mc.GetModelIDValue(m) != 0 {
 		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)
@@ -236,15 +253,16 @@ func (mc *Controller) SaveToDB(m interface{}) (error) {
 	return nil
 }
 
+// SetFromDB sets struct fields from database record
 func (mc *Controller) SetFromDB(m interface{}, id string) error {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		return fmt.Errorf("error with strconv.Atoi in SetFromDB: %s", err)
 	}
 
-	h, err := mc.GetHelper(m)
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in Validate: %s", err)
+		return fmt.Errorf("error with getHelper in Validate: %s", err)
 	}
 
 	err = mc.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), mc.GetModelIDInterface(m)), mc.GetModelFieldInterfaces(m)...)...)
@@ -260,10 +278,11 @@ func (mc *Controller) SetFromDB(m interface{}, id string) error {
 	return nil
 }
 
+// DeleteFromDB removes struct from the database storage
 func (mc *Controller) DeleteFromDB(m interface{}) error {
-	h, err := mc.GetHelper(m)
+	h, err := mc.getHelper(m)
 	if err != nil {
-		return fmt.Errorf("error with GetHelper in Validate: %s", err)
+		return fmt.Errorf("error with getHelper in Validate: %s", err)
 	}
 	if mc.GetModelIDValue(m) == 0 {
 		return nil
@@ -276,27 +295,31 @@ func (mc *Controller) DeleteFromDB(m interface{}) error {
 	return nil
 }
 
+// GetModelIDInterface returns interface to ID field of a specified struct
 func (mc *Controller) GetModelIDInterface(u interface{}) interface{} {
 	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
 }
 
+// GetModelIDValue returns value of ID field (int64) of a specified struct
 func (mc *Controller) GetModelIDValue(u interface{}) int64 {
 	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
 }
 
+// GetModelFieldInterfaces returns list of interfaces for struct fields, excluding the ID field
 func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
-    val := reflect.ValueOf(u).Elem()
-    var v []interface{}
-    for i := 1; i < val.NumField(); i++ {
-        valueField := val.Field(i)
+	val := reflect.ValueOf(u).Elem()
+	var v []interface{}
+	for i := 1; i < val.NumField(); i++ {
+		valueField := val.Field(i)
 		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.String {
 			continue
 		}
-        v = append(v, valueField.Addr().Interface())
-    }
-    return v
+		v = append(v, valueField.Addr().Interface())
+	}
+	return v
 }
 
+// ResetFields zeroes struct field values
 func (mc *Controller) ResetFields(u interface{}) {
 	val := reflect.ValueOf(u).Elem()
 	for i := 0; i < val.NumField(); i++ {
@@ -313,6 +336,7 @@ func (mc *Controller) ResetFields(u interface{}) {
 	}
 }
 
+// GetHTTPHandler returns HTTP handler (func) that can be attached to HTTP server which creates a CRUDL endpoint for a specific struct
 func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		PrintMemUsage()
@@ -321,15 +345,15 @@ func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.Respon
 			return
 		}
 		if r.Method == http.MethodPut {
-			mc.HandleHTTPPut(w, r, u, id)
+			mc.handleHTTPPut(w, r, u, id)
 			return
 		}
 		if r.Method == http.MethodGet {
-			mc.HandleHTTPGet(w, r, u, id)
+			mc.handleHTTPGet(w, r, u, id)
 			return
 		}
 		if r.Method == http.MethodDelete {
-			mc.HandleHTTPDelete(w, r, u, id)
+			mc.handleHTTPDelete(w, r, u, id)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -338,7 +362,7 @@ func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.Respon
 	return fn
 }
 
-func (mc *Controller) HandleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Print(err)
@@ -386,7 +410,7 @@ func (mc *Controller) HandleHTTPPut(w http.ResponseWriter, r *http.Request, u in
 	return
 }
 
-func (mc *Controller) HandleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(mc.jsonError("id missing"))
@@ -415,7 +439,7 @@ func (mc *Controller) HandleHTTPGet(w http.ResponseWriter, r *http.Request, u in
 	return
 }
 
-func (mc *Controller) HandleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(mc.jsonError("id missing"))
@@ -465,15 +489,16 @@ func (mc *Controller) jsonID(id int64) []byte {
 	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
 }
 
+// PrintMemUsage needs removing
 func PrintMemUsage() {
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
-        // For info on each, see: https://golang.org/pkg/runtime/#MemStats
-        fmt.Printf("Alloc = %v B", m.Alloc)
-        fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
-        fmt.Printf("\tSys = %v B", m.Sys)
-        fmt.Printf("\tNumGC = %v", m.NumGC)
-		fmt.Printf("\tMallocs = %v", m.Mallocs)
-		fmt.Printf("\tFrees = %v", m.Frees)
-		fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
+	fmt.Printf("Alloc = %v B", m.Alloc)
+	fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
+	fmt.Printf("\tSys = %v B", m.Sys)
+	fmt.Printf("\tNumGC = %v", m.NumGC)
+	fmt.Printf("\tMallocs = %v", m.Mallocs)
+	fmt.Printf("\tFrees = %v", m.Frees)
+	fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
 }

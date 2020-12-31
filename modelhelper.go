@@ -3,12 +3,13 @@ package crudl
 import (
 	"fmt"
 	"reflect"
-	"strings"
-	"strconv"
 	"regexp"
+	"strconv"
+	"strings"
 	"unicode"
 )
 
+// Helper is used to generate Postgres SQL queries and parse validation defined in "crudl" tag so that can be attached to a specific struct type
 type Helper struct {
 	queryDropTable   string
 	queryCreateTable string
@@ -27,6 +28,7 @@ type Helper struct {
 	regexpFields     map[int]*regexp.Regexp
 }
 
+// NewHelper returns new Helper struct
 func NewHelper(m interface{}) (*Helper, error) {
 	h := &Helper{}
 	err := h.SetFromTags(m)
@@ -36,30 +38,37 @@ func NewHelper(m interface{}) (*Helper, error) {
 	return h, nil
 }
 
+// GetQueryDropTable returns drop table query
 func (m *Helper) GetQueryDropTable() string {
 	return m.queryDropTable
 }
 
+// GetQueryCreateTable return create table query
 func (m *Helper) GetQueryCreateTable() string {
 	return m.queryCreateTable
 }
 
+// GetQueryInsert returns insert query
 func (m *Helper) GetQueryInsert() string {
 	return m.queryInsert
 }
 
+// GetQueryUpdateById returns update query
 func (m *Helper) GetQueryUpdateById() string {
 	return m.queryUpdateById
 }
 
+// GetQuerySelectById returns select query
 func (m *Helper) GetQuerySelectById() string {
 	return m.querySelectById
 }
 
+// GetQueryDeleteById returns delete query
 func (m *Helper) GetQueryDeleteById() string {
 	return m.queryDeleteById
 }
 
+// SetFromTags takes struct to generate SQL queries for it and parses its "crudl" tag for validation
 func (m *Helper) SetFromTags(u interface{}) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
