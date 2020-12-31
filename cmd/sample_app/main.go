@@ -6,6 +6,7 @@ import (
 	"os"
 	// "time"
 	"net/http"
+	"github.com/gen64/go-crudl"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	}
 	defer conn.Close()
 
-	mc := &ModelController{}
+	mc := &crudl.Controller{}
 	mc.AttachDBConn(conn)
 	mc.SetDBTablePrefix("f0x_")
 

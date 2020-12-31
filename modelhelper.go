@@ -1,4 +1,4 @@
-package main
+package crudl
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"unicode"
 )
 
-type ModelHelper struct {
+type Helper struct {
 	queryDropTable   string
 	queryCreateTable string
 	queryInsert      string
@@ -27,40 +27,40 @@ type ModelHelper struct {
 	regexpFields     map[int]*regexp.Regexp
 }
 
-func NewModelHelper(m interface{}) (*ModelHelper, error) {
-	h := &ModelHelper{}
+func NewHelper(m interface{}) (*Helper, error) {
+	h := &Helper{}
 	err := h.SetFromTags(m)
 	if err != nil {
-		return nil, fmt.Errorf("error with SetFromTags in NewModelHelper: %s", err)
+		return nil, fmt.Errorf("error with SetFromTags in NewHelper: %s", err)
 	}
 	return h, nil
 }
 
-func (m *ModelHelper) GetQueryDropTable() string {
+func (m *Helper) GetQueryDropTable() string {
 	return m.queryDropTable
 }
 
-func (m *ModelHelper) GetQueryCreateTable() string {
+func (m *Helper) GetQueryCreateTable() string {
 	return m.queryCreateTable
 }
 
-func (m *ModelHelper) GetQueryInsert() string {
+func (m *Helper) GetQueryInsert() string {
 	return m.queryInsert
 }
 
-func (m *ModelHelper) GetQueryUpdateById() string {
+func (m *Helper) GetQueryUpdateById() string {
 	return m.queryUpdateById
 }
 
-func (m *ModelHelper) GetQuerySelectById() string {
+func (m *Helper) GetQuerySelectById() string {
 	return m.querySelectById
 }
 
-func (m *ModelHelper) GetQueryDeleteById() string {
+func (m *Helper) GetQueryDeleteById() string {
 	return m.queryDeleteById
 }
 
-func (m *ModelHelper) SetFromTags(u interface{}) error {
+func (m *Helper) SetFromTags(u interface{}) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -183,7 +183,7 @@ func (m *ModelHelper) SetFromTags(u interface{}) error {
 	return nil
 }
 
-func (m *ModelHelper) getUnderscoredName(s string) string {
+func (m *Helper) getUnderscoredName(s string) string {
 	o := ""
 	var prev rune
 	for i, ch := range s {
@@ -205,7 +205,7 @@ func (m *ModelHelper) getUnderscoredName(s string) string {
 	return o
 }
 
-func (m *ModelHelper) getPluralName(s string) string {
+func (m *Helper) getPluralName(s string) string {
 	re := regexp.MustCompile(`y$`)
 	if re.MatchString(s) {
 		return string(re.ReplaceAll([]byte(s), []byte(`ies`)))
@@ -217,7 +217,7 @@ func (m *ModelHelper) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (m *ModelHelper) parseCrudlTagLine(s string) (bool, int, int, string, bool, int, int, string, error) {
+func (m *Helper) parseCrudlTagLine(s string) (bool, int, int, string, bool, int, int, string, error) {
 	xt := strings.SplitN(s, " ", -1)
 	req := false
 	lenmin := -1

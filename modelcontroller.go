@@ -1,4 +1,4 @@
-package main
+package crudl
 
 import (
 	"database/sql"
@@ -14,40 +14,40 @@ import (
 	"runtime"
 )
 
-type ModelController struct {
+type Controller struct {
 	dbConn *sql.DB
 	dbTablePrefix string
-	modelHelpers map[string]*ModelHelper
+	modelHelpers map[string]*Helper
 }
 
-func (mc *ModelController) SetDBTablePrefix(p string) {
+func (mc *Controller) SetDBTablePrefix(p string) {
 	mc.dbTablePrefix = p
 }
 
-func (mc *ModelController) AttachDBConn(db *sql.DB) {
+func (mc *Controller) AttachDBConn(db *sql.DB) {
 	mc.dbConn = db
 }
 
-func (mc *ModelController) GetHelper(m interface{}) (*ModelHelper, error) {
+func (mc *Controller) GetHelper(m interface{}) (*Helper, error) {
 	v := reflect.ValueOf(m)
 	i := reflect.Indirect(v)
 	s := i.Type()
 	n := s.Name()
 
 	if mc.modelHelpers == nil {
-		mc.modelHelpers = make(map[string]*ModelHelper)
+		mc.modelHelpers = make(map[string]*Helper)
 	}
 	if mc.modelHelpers[n] == nil {
-		h, err := NewModelHelper(m)
+		h, err := NewHelper(m)
 		if err != nil {
-			return nil, fmt.Errorf("error with NewModelHelper in GetHelper: %s", err)
+			return nil, fmt.Errorf("error with NewHelper in GetHelper: %s", err)
 		}
 		mc.modelHelpers[n] = h
 	}
 	return mc.modelHelpers[n], nil
 }
 
-func (mc *ModelController) DropDBTables(xm ...interface{}) error {
+func (mc *Controller) DropDBTables(xm ...interface{}) error {
 	for _, m := range xm {
 		err := mc.DropDBTable(m)
 		if err != nil {
@@ -57,7 +57,7 @@ func (mc *ModelController) DropDBTables(xm ...interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) CreateDBTables(xm ...interface{}) error {
+func (mc *Controller) CreateDBTables(xm ...interface{}) error {
 	for _, m := range xm {
 		err := mc.CreateDBTable(m)
 		if err != nil {
@@ -67,7 +67,7 @@ func (mc *ModelController) CreateDBTables(xm ...interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
+func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 	xi := []int{}
 	b := true
 
@@ -163,7 +163,7 @@ func (mc *ModelController) Validate(m interface{}) (bool, []int, error) {
 	return b, xi, nil
 }
 
-func (mc *ModelController) PopulateLinks(m interface{}) {
+func (mc *Controller) PopulateLinks(m interface{}) {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return
@@ -182,7 +182,7 @@ func (mc *ModelController) PopulateLinks(m interface{}) {
 	}
 }
 
-func (mc *ModelController) CreateDBTable(m interface{}) error {
+func (mc *Controller) CreateDBTable(m interface{}) error {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in CreateDBTable: %s", err)
@@ -195,7 +195,7 @@ func (mc *ModelController) CreateDBTable(m interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) DropDBTable(m interface{}) error {
+func (mc *Controller) DropDBTable(m interface{}) error {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in DropDBTable: %s", err)
@@ -208,7 +208,7 @@ func (mc *ModelController) DropDBTable(m interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) SaveToDB(m interface{}) (error) {
+func (mc *Controller) SaveToDB(m interface{}) (error) {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
@@ -236,7 +236,7 @@ func (mc *ModelController) SaveToDB(m interface{}) (error) {
 	return nil
 }
 
-func (mc *ModelController) SetFromDB(m interface{}, id string) error {
+func (mc *Controller) SetFromDB(m interface{}, id string) error {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		return fmt.Errorf("error with strconv.Atoi in SetFromDB: %s", err)
@@ -260,7 +260,7 @@ func (mc *ModelController) SetFromDB(m interface{}, id string) error {
 	return nil
 }
 
-func (mc *ModelController) DeleteFromDB(m interface{}) error {
+func (mc *Controller) DeleteFromDB(m interface{}) error {
 	h, err := mc.GetHelper(m)
 	if err != nil {
 		return fmt.Errorf("error with GetHelper in Validate: %s", err)
@@ -276,15 +276,15 @@ func (mc *ModelController) DeleteFromDB(m interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) GetModelIDInterface(u interface{}) interface{} {
+func (mc *Controller) GetModelIDInterface(u interface{}) interface{} {
 	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
 }
 
-func (mc *ModelController) GetModelIDValue(u interface{}) int64 {
+func (mc *Controller) GetModelIDValue(u interface{}) int64 {
 	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
 }
 
-func (mc *ModelController) GetModelFieldInterfaces(u interface{}) []interface{} {
+func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
     val := reflect.ValueOf(u).Elem()
     var v []interface{}
     for i := 1; i < val.NumField(); i++ {
@@ -297,7 +297,7 @@ func (mc *ModelController) GetModelFieldInterfaces(u interface{}) []interface{} 
     return v
 }
 
-func (mc *ModelController) ResetFields(u interface{}) {
+func (mc *Controller) ResetFields(u interface{}) {
 	val := reflect.ValueOf(u).Elem()
 	for i := 0; i < val.NumField(); i++ {
 		valueField := val.Field(i)
@@ -313,7 +313,7 @@ func (mc *ModelController) ResetFields(u interface{}) {
 	}
 }
 
-func (mc *ModelController) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		PrintMemUsage()
 		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
@@ -338,7 +338,7 @@ func (mc *ModelController) GetHTTPHandler(u interface{}, uri string) func(http.R
 	return fn
 }
 
-func (mc *ModelController) HandleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) HandleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Print(err)
@@ -386,7 +386,7 @@ func (mc *ModelController) HandleHTTPPut(w http.ResponseWriter, r *http.Request,
 	return
 }
 
-func (mc *ModelController) HandleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) HandleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(mc.jsonError("id missing"))
@@ -415,7 +415,7 @@ func (mc *ModelController) HandleHTTPGet(w http.ResponseWriter, r *http.Request,
 	return
 }
 
-func (mc *ModelController) HandleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (mc *Controller) HandleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(mc.jsonError("id missing"))
@@ -442,7 +442,7 @@ func (mc *ModelController) HandleHTTPDelete(w http.ResponseWriter, r *http.Reque
 	return
 }
 
-func (mc *ModelController) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
+func (mc *Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
 	xs := strings.SplitN(uri, "?", 2)
 	if xs[0] == "" {
 		return "", true
@@ -457,11 +457,11 @@ func (mc *ModelController) getIDFromURI(uri string, w http.ResponseWriter) (stri
 	}
 }
 
-func (mc *ModelController) jsonError(e string) []byte {
+func (mc *Controller) jsonError(e string) []byte {
 	return []byte(fmt.Sprintf("{\"err\":\"%s\"}", e))
 }
 
-func (mc *ModelController) jsonID(id int64) []byte {
+func (mc *Controller) jsonID(id int64) []byte {
 	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
 }
 
