@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
+	// "time"
+	"net/http"
 )
 
 func main() {
@@ -26,8 +27,11 @@ func main() {
 	mc.AttachDBConn(conn)
 	mc.SetDBTablePrefix("f0x_")
 
+	user := &User{}
+	session := &Session{}
+
 	models := []interface{}{
-		&User{}, &Session{},
+		user, session,
 	}
 
 	// Drop all structure
@@ -42,6 +46,7 @@ func main() {
 		log.Printf("Error with CreateTables: %s", err)
 	}
 
+	/*
 	// Add data
 	user := &User{
 		Flags: 1+2+4,
@@ -96,9 +101,8 @@ func main() {
 	}
 	b, fields, err := mc.Validate(sth)
 	log.Print(b)
-	log.Print(fields)
+	log.Print(fields)*/
 
-	// userHandler := mc.CreateHTTPHandler(user)
-	// sessionHandler := mc.CreateHTTPHandler(sessionHandler)
-	// mc.AttachCRUDL(http object, user) -> http.HandleFunc ...
+	http.HandleFunc("/users/", mc.GetHTTPHandler(user, "/users/"))
+	log.Fatal(http.ListenAndServe(":9001", nil))
 }

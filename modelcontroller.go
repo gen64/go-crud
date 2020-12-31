@@ -6,6 +6,12 @@ import (
 	"reflect"
 	"strconv"
 	"regexp"
+	"net/http"
+	"strings"
+	"io/ioutil"
+	"log"
+	"encoding/json"
+	"runtime"
 )
 
 type ModelController struct {
@@ -202,19 +208,19 @@ func (mc *ModelController) DropDBTable(m interface{}) error {
 	return nil
 }
 
-func (mc *ModelController) SaveToDB(m interface{}) (int64, error) {
+func (mc *ModelController) SaveToDB(m interface{}) (error) {
 	h, err := mc.GetHelper(m)
 	if err != nil {
-		return 0, fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
+		return fmt.Errorf("error with GetHelper in SaveToDB: %s", err)
 	}
 
 	b, _, err := mc.Validate(m)
 	if err != nil {
-		return 0, fmt.Errorf("error with Validate in SaveToDB: %s", err)
+		return fmt.Errorf("error with Validate in SaveToDB: %s", err)
 	}
 
 	if !b {
-		return 0, fmt.Errorf("error with Validate in SaveToDB")
+		return fmt.Errorf("error with Validate in SaveToDB")
 	}
 
 	mc.PopulateLinks(m)
@@ -225,9 +231,9 @@ func (mc *ModelController) SaveToDB(m interface{}) (int64, error) {
 		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
 	}
 	if err != nil {
-		return 0, fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
+		return fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
 	}
-	return mc.GetModelIDValue(m), nil
+	return nil
 }
 
 func (mc *ModelController) SetFromDB(m interface{}, id string) error {
@@ -305,4 +311,169 @@ func (mc *ModelController) ResetFields(u interface{}) {
 			valueField.SetString("")
 		}
 	}
+}
+
+func (mc *ModelController) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		PrintMemUsage()
+		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
+		if !b {
+			return
+		}
+		if r.Method == http.MethodPut {
+			mc.HandleHTTPPut(w, r, u, id)
+			return
+		}
+		if r.Method == http.MethodGet {
+			mc.HandleHTTPGet(w, r, u, id)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			mc.HandleHTTPDelete(w, r, u, id)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	return fn
+}
+
+func (mc *ModelController) HandleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if id != "" {
+		err = mc.SetFromDB(u, id)
+		if err != nil {
+			log.Print(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if mc.GetModelIDValue(u) == 0 {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+	} else {
+		mc.ResetFields(u)
+	}
+
+	err = json.Unmarshal(body, u)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	b, _, err := mc.Validate(u)
+	if !b || err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("{\"err\":\"validation failed: %s\"}", err)))
+		return
+	}
+
+	err = mc.SaveToDB(u)
+	if err != nil {
+		log.Print(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(mc.jsonID(mc.GetModelIDValue(u)))
+	return
+}
+
+func (mc *ModelController) HandleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(mc.jsonError("id missing"))
+		return
+	}
+
+	err := mc.SetFromDB(u, id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if mc.GetModelIDValue(u) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	j, err := json.Marshal(u)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(j)
+	return
+}
+
+func (mc *ModelController) HandleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+	if id == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(mc.jsonError("id missing"))
+		return
+	}
+
+	err := mc.SetFromDB(u, id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	if mc.GetModelIDValue(u) == 0 {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	err = mc.DeleteFromDB(u)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	return
+}
+
+func (mc *ModelController) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
+	xs := strings.SplitN(uri, "?", 2)
+	if xs[0] == "" {
+		return "", true
+	} else {
+		matched, err := regexp.Match(`^[0-9]+$`, []byte(xs[0]))
+		if err != nil || !matched {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write(mc.jsonError("invalid id"))
+			return "", false
+		}
+		return xs[0], true
+	}
+}
+
+func (mc *ModelController) jsonError(e string) []byte {
+	return []byte(fmt.Sprintf("{\"err\":\"%s\"}", e))
+}
+
+func (mc *ModelController) jsonID(id int64) []byte {
+	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
+}
+
+func PrintMemUsage() {
+        var m runtime.MemStats
+        runtime.ReadMemStats(&m)
+        // For info on each, see: https://golang.org/pkg/runtime/#MemStats
+        fmt.Printf("Alloc = %v B", m.Alloc)
+        fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
+        fmt.Printf("\tSys = %v B", m.Sys)
+        fmt.Printf("\tNumGC = %v", m.NumGC)
+		fmt.Printf("\tMallocs = %v", m.Mallocs)
+		fmt.Printf("\tFrees = %v", m.Frees)
+		fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
 }
