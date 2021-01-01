@@ -57,10 +57,10 @@ func TestSQLQueries(t *testing.T) {
 }
 
 func TestPluralName(t *testing.T) {
-	type Category struct {}
-	type Cross struct {}
-	type ProductCategory struct {}
-	type UserCart struct {}
+	type Category struct{}
+	type Cross struct{}
+	type ProductCategory struct{}
+	type UserCart struct{}
 
 	h1, _ := NewHelper(&Category{})
 	h2, _ := NewHelper(&Cross{})
@@ -93,10 +93,10 @@ func TestPluralName(t *testing.T) {
 }
 
 func TestValidationFields(t *testing.T) {
-	h, _:= NewHelper(ts)
+	h, _ := NewHelper(ts)
 
 	got := h.reqFields
-	want := []int{2,3,4,5,6}
+	want := []int{2, 3, 4, 5, 6}
 	if len(got) != len(want) {
 		t.Fatalf("Want %v, got %v", len(want), len(got))
 	}
@@ -107,7 +107,7 @@ func TestValidationFields(t *testing.T) {
 	}
 
 	got2 := h.lenFields
-	want2 := [][3]int{{2,10,255}, {6,6,-1}}
+	want2 := [][3]int{{2, 10, 255}, {6, 6, -1}}
 	if len(got2) != len(want2) {
 		t.Fatalf("Want %v, got %v", len(want2), len(got2))
 	}
@@ -118,7 +118,7 @@ func TestValidationFields(t *testing.T) {
 		t.Fatalf("Want %v, got %v", len(want2), len(got2))
 	}
 	for i, _ := range got2 {
-		for j:=0; j<3; j++ {
+		for j := 0; j < 3; j++ {
 			if got2[i][j] != want2[i][j] {
 				t.Fatalf("Want %v, got %v", want2[i][j], got2[i][j])
 			}
@@ -137,7 +137,7 @@ func TestValidationFields(t *testing.T) {
 	}
 
 	got4 := h.valFields
-	want4 := [][3]int{{3,18,120},{4,5,3580},{5,10,50004}}
+	want4 := [][3]int{{3, 18, 120}, {4, 5, 3580}, {5, 10, 50004}}
 	if len(got4) != len(want4) {
 		t.Fatalf("Want %v, got %v", len(want4), len(got4))
 	}
@@ -151,7 +151,7 @@ func TestValidationFields(t *testing.T) {
 		t.Fatalf("Want %v, got %v", len(want4), len(got4))
 	}
 	for i, _ := range got4 {
-		for j:=0; j<3; j++ {
+		for j := 0; j < 3; j++ {
 			if got4[i][j] != want4[i][j] {
 				t.Fatalf("Want %v, got %v", want4[i][j], got4[i][j])
 			}

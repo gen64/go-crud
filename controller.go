@@ -22,7 +22,7 @@ type Controller struct {
 }
 
 // NewController returns new Controller struct
-func NewController() (*Controller) {
+func NewController() *Controller {
 	c := &Controller{}
 	return c
 }
