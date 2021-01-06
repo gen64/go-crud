@@ -311,7 +311,7 @@ func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
 	var v []interface{}
 	for i := 1; i < val.NumField(); i++ {
 		valueField := val.Field(i)
-		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.String {
+		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.Int && valueField.Kind() != reflect.String {
 			continue
 		}
 		v = append(v, valueField.Addr().Interface())
@@ -328,6 +328,9 @@ func (mc *Controller) ResetFields(u interface{}) {
 			valueField.Set(reflect.Zero(valueField.Type()))
 		}
 		if valueField.Kind() == reflect.Int64 {
+			valueField.SetInt(0)
+		}
+		if valueField.Kind() == reflect.Int {
 			valueField.SetInt(0)
 		}
 		if valueField.Kind() == reflect.String {
