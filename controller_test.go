@@ -1,18 +1,18 @@
 package crudl
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	_ "github.com/lib/pq"
 	"github.com/ory/dockertest/v3"
-	"log"
-	"testing"
-	"fmt"
-	"time"
-	"net/http"
-	"context"
-	"bytes"
 	"io/ioutil"
-	"encoding/json"
+	"log"
+	"net/http"
+	"testing"
+	"time"
 )
 
 type TestStruct1 struct {
@@ -82,7 +82,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestSaveToDB(t *testing.T) {
-	ts1 := &TestStruct1{ Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112" }
+	ts1 := &TestStruct1{Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112"}
 	_ = mc.SaveToDB(ts1)
 	id, flags, email, age, price, rate, code, err := getRow()
 	if err != nil || flags != 4 || email != "test@example.com" || age != 37 || price != 1000 || rate != 14432 || code != "66-112" {
@@ -222,7 +222,7 @@ func TestDropDBTables(t *testing.T) {
 		t.Fatalf("DropDBTables failed to drop table for a struct: %s", err)
 	}
 
-	removeDocker();
+	removeDocker()
 }
 
 func createDocker() {
@@ -241,7 +241,7 @@ func createDocker() {
 	}
 
 	if db == nil {
-		time.Sleep(10*time.Second)
+		time.Sleep(10 * time.Second)
 		db, err = sql.Open("postgres", fmt.Sprintf("host=localhost user=%s password=%s port=%s dbname=%s sslmode=disable", dbUser, dbPass, resource.GetPort("5432/tcp"), dbName))
 		if err != nil {
 			log.Fatalf("Could not connect to postgres docker: %s", err)
@@ -303,15 +303,15 @@ func createHTTPServer() {
 			go func() {
 				ts1 := &TestStruct1{}
 				http.HandleFunc("/"+httpURI+"/", mc.GetHTTPHandler(ts1, "/"+httpURI+"/"))
-				http.ListenAndServe(":" + httpPort, nil)
+				http.ListenAndServe(":"+httpPort, nil)
 			}()
 		}(ctx)
-		time.Sleep(2*time.Second)
+		time.Sleep(2 * time.Second)
 	}
 }
 
 func makePUTInsertRequest(j string, t *testing.T) {
-	req, err := http.NewRequest("PUT", "http://localhost:" + httpPort + "/" + httpURI + "/", bytes.NewReader([]byte(j)))
+	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+"/"+httpURI+"/", bytes.NewReader([]byte(j)))
 	if err != nil {
 		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
 	}
@@ -326,7 +326,7 @@ func makePUTInsertRequest(j string, t *testing.T) {
 }
 
 func makePUTUpdateRequest(j string, t *testing.T) {
-	req, err := http.NewRequest("PUT", "http://localhost:" + httpPort + "/" + httpURI + "/" + fmt.Sprintf("%d", globalId), bytes.NewReader([]byte(j)))
+	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte(j)))
 	if err != nil {
 		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
 	}
@@ -341,7 +341,7 @@ func makePUTUpdateRequest(j string, t *testing.T) {
 }
 
 func makeDELETERequest(t *testing.T) {
-	req, err := http.NewRequest("DELETE", "http://localhost:" + httpPort + "/" + httpURI + "/" + fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
+	req, err := http.NewRequest("DELETE", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
 	if err != nil {
 		t.Fatalf("DELETE method failed on HTTP server with handler from GetHTTPHandler: %s", err)
 	}
@@ -356,7 +356,7 @@ func makeDELETERequest(t *testing.T) {
 }
 
 func makeGETRequest(t *testing.T) *http.Response {
-	req, err := http.NewRequest("GET", "http://localhost:" + httpPort + "/" + httpURI + "/" + fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
+	req, err := http.NewRequest("GET", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
 	if err != nil {
 		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
 	}
