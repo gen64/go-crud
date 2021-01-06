@@ -241,15 +241,15 @@ func createDocker() {
 	}
 
 	if db == nil {
-		time.Sleep(10 * time.Second)
-		db, err = sql.Open("postgres", fmt.Sprintf("host=localhost user=%s password=%s port=%s dbname=%s sslmode=disable", dbUser, dbPass, resource.GetPort("5432/tcp"), dbName))
-		if err != nil {
-			log.Fatalf("Could not connect to postgres docker: %s", err)
-		}
-
-		err = db.Ping()
-		if err != nil {
-			log.Fatalf("Could not start postgres docker: %s", err)
+		if err = pool.Retry(func() error {
+			var err error
+			db, err = sql.Open("postgres", fmt.Sprintf("host=localhost user=%s password=%s port=%s dbname=%s sslmode=disable", dbUser, dbPass, resource.GetPort("5432/tcp"), dbName))
+			if err != nil {
+				return err
+			}
+			return db.Ping()
+		}); err != nil {
+			log.Fatalf("Could not connect to docker: %s", err)
 		}
 	}
 }
