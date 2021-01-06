@@ -17,7 +17,7 @@ type TestStruct struct {
 var ts = &TestStruct{}
 
 func TestSQLQueries(t *testing.T) {
-	h, _ := NewHelper(ts)
+	h, _ := NewHelper(ts, "")
 
 	got := h.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS test_structs"
@@ -62,10 +62,10 @@ func TestPluralName(t *testing.T) {
 	type ProductCategory struct{}
 	type UserCart struct{}
 
-	h1, _ := NewHelper(&Category{})
-	h2, _ := NewHelper(&Cross{})
-	h3, _ := NewHelper(&ProductCategory{})
-	h4, _ := NewHelper(&UserCart{})
+	h1, _ := NewHelper(&Category{}, "")
+	h2, _ := NewHelper(&Cross{}, "")
+	h3, _ := NewHelper(&ProductCategory{}, "")
+	h4, _ := NewHelper(&UserCart{}, "")
 
 	got := h1.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS categories"
@@ -93,7 +93,7 @@ func TestPluralName(t *testing.T) {
 }
 
 func TestValidationFields(t *testing.T) {
-	h, _ := NewHelper(ts)
+	h, _ := NewHelper(ts, "")
 
 	got := h.reqFields
 	want := []int{2, 3, 4, 5, 6}

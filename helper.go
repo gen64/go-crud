@@ -29,9 +29,9 @@ type Helper struct {
 }
 
 // NewHelper returns new Helper struct
-func NewHelper(m interface{}) (*Helper, error) {
+func NewHelper(m interface{}, p string) (*Helper, error) {
 	h := &Helper{}
-	err := h.SetFromTags(m)
+	err := h.SetFromTags(m, p)
 	if err != nil {
 		return nil, fmt.Errorf("error with SetFromTags in NewHelper: %s", err)
 	}
@@ -69,14 +69,14 @@ func (m *Helper) GetQueryDeleteById() string {
 }
 
 // SetFromTags takes struct to generate SQL queries for it and parses its "crudl" tag for validation
-func (m *Helper) SetFromTags(u interface{}) error {
+func (m *Helper) SetFromTags(u interface{}, dbTablePrefix string) error {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
 	usName := m.getUnderscoredName(s.Name())
 	usPluName := m.getPluralName(usName)
 
-	m.dbTbl = usPluName
+	m.dbTbl = dbTablePrefix + usPluName
 	m.dbColPrefix = usName
 	m.url = usPluName
 

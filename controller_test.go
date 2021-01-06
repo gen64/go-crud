@@ -85,7 +85,7 @@ func getRow() (int64, int64, string, int, int, int, string, error) {
 	var price int
 	var currencyRate int
 	var postCode string
-	err := db.QueryRow("SELECT * FROM test_struct1s LIMIT 1").Scan(&id, &flags, &email, &age, &price, &currencyRate, &postCode)
+	err := db.QueryRow("SELECT * FROM f0x_test_struct1s LIMIT 1").Scan(&id, &flags, &email, &age, &price, &currencyRate, &postCode)
 	return id, flags, email, age, price, currencyRate, postCode, err
 }
 
@@ -96,7 +96,7 @@ func getRowById(id int64) (int64, string, int, int, int, string, error) {
 	var price int
 	var currencyRate int
 	var postCode string
-	err := db.QueryRow("SELECT test_struct1_flags, email, age, price, currency_rate, post_code FROM test_struct1s WHERE test_struct1_id = $1", int64(id)).Scan(&flags, &email, &age, &price, &currencyRate, &postCode)
+	err := db.QueryRow("SELECT test_struct1_flags, email, age, price, currency_rate, post_code FROM f0x_test_struct1s WHERE test_struct1_id = $1", int64(id)).Scan(&flags, &email, &age, &price, &currencyRate, &postCode)
 	return flags, email, age, price, currencyRate, postCode, err
 }
 
@@ -107,8 +107,8 @@ func TestCreateDBTables(t *testing.T) {
 	ts1 := &TestStruct1{}
 	_ = mc.CreateDBTables(ts1)
 
-	n, err := getTableName("test_struct1s")
-	if err != nil || n != "test_struct1s" {
+	n, err := getTableName("f0x_test_struct1s")
+	if err != nil || n != "f0x_test_struct1s" {
 		t.Fatalf("CreateDBTables failed to create table for a struct: %s", err)
 	}
 }
@@ -171,7 +171,7 @@ func TestDropDBTables(t *testing.T) {
 	ts1 := &TestStruct1{}
 	_ = mc.DropDBTables(ts1)
 
-	n, err := getTableName("test_struct1s")
+	n, err := getTableName("f0x_test_struct1s")
 	if err != sql.ErrNoRows || n != "" {
 		t.Fatalf("DropDBTables failed to drop table for a struct: %s", err)
 	}

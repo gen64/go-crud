@@ -48,7 +48,7 @@ func (mc *Controller) getHelper(m interface{}) (*Helper, error) {
 		mc.modelHelpers = make(map[string]*Helper)
 	}
 	if mc.modelHelpers[n] == nil {
-		h, err := NewHelper(m)
+		h, err := NewHelper(m, mc.dbTablePrefix)
 		if err != nil {
 			return nil, fmt.Errorf("error with NewHelper in getHelper: %s", err)
 		}
