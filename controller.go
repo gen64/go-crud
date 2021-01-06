@@ -342,7 +342,6 @@ func (mc *Controller) ResetFields(u interface{}) {
 // GetHTTPHandler returns HTTP handler (func) that can be attached to HTTP server which creates a CRUDL endpoint for a specific struct
 func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		PrintMemUsage()
 		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
