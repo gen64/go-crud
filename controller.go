@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
-	"runtime"
 	"strconv"
 	"strings"
 )
@@ -48,9 +47,9 @@ func (mc *Controller) getHelper(m interface{}) (*Helper, error) {
 		mc.modelHelpers = make(map[string]*Helper)
 	}
 	if mc.modelHelpers[n] == nil {
-		h, err := NewHelper(m, mc.dbTablePrefix)
-		if err != nil {
-			return nil, fmt.Errorf("error with NewHelper in getHelper: %s", err)
+		h := NewHelper(m, mc.dbTablePrefix)
+		if h.Err() != nil {
+			return nil, fmt.Errorf("error with NewHelper in getHelper: %s", h.Err())
 		}
 		mc.modelHelpers[n] = h
 	}
@@ -489,18 +488,4 @@ func (mc *Controller) jsonError(e string) []byte {
 
 func (mc *Controller) jsonID(id int64) []byte {
 	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
-}
-
-// PrintMemUsage needs removing
-func PrintMemUsage() {
-	var m runtime.MemStats
-	runtime.ReadMemStats(&m)
-	// For info on each, see: https://golang.org/pkg/runtime/#MemStats
-	fmt.Printf("Alloc = %v B", m.Alloc)
-	fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
-	fmt.Printf("\tSys = %v B", m.Sys)
-	fmt.Printf("\tNumGC = %v", m.NumGC)
-	fmt.Printf("\tMallocs = %v", m.Mallocs)
-	fmt.Printf("\tFrees = %v", m.Frees)
-	fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
 }

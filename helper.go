@@ -1,6 +1,7 @@
 package crudl
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -8,6 +9,21 @@ import (
 	"strings"
 	"unicode"
 )
+
+// HelperError has details on failure in reflecting the struct
+type HelperError struct {
+	Op  string
+	Tag string
+	err error
+}
+
+func (e HelperError) Error() string {
+	return e.err.Error()
+}
+
+func (e HelperError) Unwrap() error {
+	return e.err
+}
 
 // Helper is used to generate Postgres SQL queries and parse validation defined in "crudl" tag so that can be attached to a specific struct type
 type Helper struct {
@@ -26,16 +42,19 @@ type Helper struct {
 	linkFields       [][2]int
 	valFields        [][3]int
 	regexpFields     map[int]*regexp.Regexp
+	err              *HelperError
 }
 
 // NewHelper returns new Helper struct
-func NewHelper(m interface{}, p string) (*Helper, error) {
+func NewHelper(m interface{}, p string) *Helper {
 	h := &Helper{}
-	err := h.SetFromTags(m, p)
-	if err != nil {
-		return nil, fmt.Errorf("error with SetFromTags in NewHelper: %s", err)
-	}
-	return h, nil
+	h.reflectStruct(m, p)
+	return h
+}
+
+// Err returns error that occurred when reflecting struct
+func (m *Helper) Err() *HelperError {
+	return m.err
 }
 
 // GetQueryDropTable returns drop table query
@@ -68,14 +87,78 @@ func (m *Helper) GetQueryDeleteById() string {
 	return m.queryDeleteById
 }
 
-// SetFromTags takes struct to generate SQL queries for it and parses its "crudl" tag for validation
-func (m *Helper) SetFromTags(u interface{}, dbTablePrefix string) error {
+func (m *Helper) setFieldFromTag(s string, j int) string {
+	req, lenmin, lenmax, link, email, valmin, valmax, re, err := m.parseTag(s)
+	if err != nil {
+		m.err = err
+		return ""
+	}
+	if req {
+		m.reqFields = append(m.reqFields, j)
+	}
+	if email {
+		m.emailFields = append(m.emailFields, j)
+	}
+	if lenmin > -1 || lenmax > -1 {
+		m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+	}
+	if valmin > -1 || valmax > -1 {
+		m.valFields = append(m.valFields, [3]int{j, valmin, valmax})
+	}
+	if re != "" {
+		m.regexpFields[j] = regexp.MustCompile(re)
+	}
+	return link
+}
+
+func (m *Helper) getDBCol(n string) string {
+	dbCol := ""
+	if n == "ID" {
+		dbCol = m.dbColPrefix + "_id"
+	} else if n == "Flags" {
+		dbCol = m.dbColPrefix + "_flags"
+	} else {
+		dbCol = m.getUnderscoredName(n)
+	}
+	return dbCol
+}
+
+func (m *Helper) getDBColParams(n string, t string) string {
+	dbColParams := ""
+	if n == "ID" {
+		dbColParams = "SERIAL PRIMARY KEY"
+	} else if n == "Flags" {
+		dbColParams = "BIGINT"
+	} else {
+		switch t {
+		case "string":
+			dbColParams = "VARCHAR(255)"
+		case "int64":
+			dbColParams = "BIGINT"
+		case "int":
+			dbColParams = "BIGINT"
+		default:
+			dbColParams = "VARCHAR(255)"
+		}
+	}
+	return dbColParams
+}
+
+func (m *Helper) addWithComma(s string, v string) string {
+	if s != "" {
+		s += ","
+	}
+	s += v
+	return s
+}
+
+func (m *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
+
 	usName := m.getUnderscoredName(s.Name())
 	usPluName := m.getPluralName(usName)
-
 	m.dbTbl = dbTablePrefix + usPluName
 	m.dbColPrefix = usName
 	m.url = usPluName
@@ -85,13 +168,8 @@ func (m *Helper) SetFromTags(u interface{}, dbTablePrefix string) error {
 	m.linkFields = make([][2]int, 0)
 	m.valFields = make([][3]int, 0)
 
-	queryCreateTableCols := ""
-	querySelectCols := ""
-	queryUpdateCols := ""
-	updateFieldCnt := 0
-	queryInsertCols := ""
-	queryInsertVals := ""
-	insertFieldCnt := 0
+	var queryCreateTableCols, querySelectCols, queryUpdateCols, queryInsertCols, queryInsertVals string
+	var updateFieldCnt, insertFieldCnt int
 
 	m.regexpFields = make(map[int]*regexp.Regexp, 0)
 
@@ -101,84 +179,36 @@ func (m *Helper) SetFromTags(u interface{}, dbTablePrefix string) error {
 			continue
 		}
 
-		crudlTagLine := field.Tag.Get("crudl")
-		req, lenmin, lenmax, link, email, valmin, valmax, re, err := m.parseCrudlTagLine(crudlTagLine)
-		if err != nil {
-			return fmt.Errorf("error with parseCrudlTagLine: %s", err)
+		link := m.setFieldFromTag(field.Tag.Get("crudl"), j)
+		if m.err != nil {
+			return
 		}
-		if req {
-			m.reqFields = append(m.reqFields, j)
-		}
-		if email {
-			m.emailFields = append(m.emailFields, j)
-		}
-		if lenmin > -1 || lenmax > -1 {
-			m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
-		}
-		if valmin > -1 || valmax > -1 {
-			m.valFields = append(m.valFields, [3]int{j, valmin, valmax})
-		}
+
 		if link != "" {
 			linkedField, linkedFound := s.FieldByName(link)
 			if !linkedFound {
-				return fmt.Errorf("invalid link %s", link)
+				m.err = &HelperError{
+					Op:  "GetLink",
+					Tag: link,
+					err: errors.New("invalid link value"),
+				}
+				return
 			}
 			m.linkFields = append(m.linkFields, [2]int{j, linkedField.Index[0]})
 		}
-		if re != "" {
-			m.regexpFields[j] = regexp.MustCompile(re)
-		}
 
-		dbCol := ""
-		if field.Name == "ID" {
-			dbCol = m.dbColPrefix + "_id"
-		} else if field.Name == "Flags" {
-			dbCol = m.dbColPrefix + "_flags"
-		} else {
-			dbCol = m.getUnderscoredName(field.Name)
-		}
+		dbCol := m.getDBCol(field.Name)
+		dbColParams := m.getDBColParams(field.Name, field.Type.String())
 
-		dbColParams := ""
-		if field.Name == "ID" {
-			dbColParams = "SERIAL PRIMARY KEY"
-		} else if field.Name == "Flags" {
-			dbColParams = "BIGINT"
-		} else {
-			switch field.Type.String() {
-			case "string":
-				dbColParams = "VARCHAR(255)"
-			case "int64":
-				dbColParams = "BIGINT"
-			case "int":
-				dbColParams = "BIGINT"
-			default:
-				dbColParams = "VARCHAR(255)"
-			}
-		}
-
-		if queryCreateTableCols != "" {
-			queryCreateTableCols += ", "
-		}
-		queryCreateTableCols += dbCol + " " + dbColParams
-		if querySelectCols != "" {
-			querySelectCols += ", "
-		}
-		querySelectCols += dbCol
+		queryCreateTableCols = m.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)
+		querySelectCols = m.addWithComma(querySelectCols, dbCol)
 		if field.Name != "ID" {
 			updateFieldCnt++
-			if queryUpdateCols != "" {
-				queryUpdateCols += ","
-			}
-			queryUpdateCols += dbCol + "=$" + strconv.Itoa(updateFieldCnt)
+			queryUpdateCols = m.addWithComma(queryUpdateCols, dbCol+"=$"+strconv.Itoa(updateFieldCnt))
+
 			insertFieldCnt++
-			if queryInsertCols != "" {
-				queryInsertCols += ","
-			}
-			queryInsertCols += dbCol
-			if queryInsertVals != "" {
-				queryInsertVals += ","
-			}
-			queryInsertVals += "$" + strconv.Itoa(insertFieldCnt)
+			queryInsertCols = m.addWithComma(queryInsertCols, dbCol)
+			queryInsertVals = m.addWithComma(queryInsertVals, "$"+strconv.Itoa(insertFieldCnt))
 		}
 	}
 
@@ -187,9 +217,7 @@ func (m *Helper) SetFromTags(u interface{}, dbTablePrefix string) error {
 	m.queryDeleteById = "DELETE FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
 	m.querySelectById = "SELECT " + querySelectCols + " FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
 	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + m.dbColPrefix + "_id"
-	updateFieldCnt++
-	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt)
-	return nil
+	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt+1)
 }
 
 func (m *Helper) getUnderscoredName(s string) string {
@@ -226,59 +254,78 @@ func (m *Helper) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (m *Helper) parseCrudlTagLine(s string) (bool, int, int, string, bool, int, int, string, error) {
+func (m *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, string, *HelperError) {
 	xt := strings.SplitN(s, " ", -1)
-	req := false
-	lenmin := -1
-	lenmax := -1
-	valmin := -1
-	valmax := -1
-	re := ""
-	link := ""
-	email := false
-	if len(xt) > 0 {
-		for _, t := range xt {
-			if t == "req" {
-				req = true
+	xb := map[string]bool{
+		"req":   false,
+		"email": false,
+	}
+	xi := map[string]int{
+		"lenmin": -1,
+		"lenmax": -1,
+		"valmin": -1,
+		"valmax": -1,
+	}
+	xs := map[string]string{
+		"regexp": "",
+		"link":   "",
+	}
+	var helperError *HelperError
+
+	if len(xt) < 1 {
+		return xb["req"], xi["lenmin"], xi["lenmax"], xs["link"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
+	}
+
+	for _, t := range xt {
+		if helperError != nil {
+			break
+		}
+
+		if t == "req" || t == "email" {
+			xb[t] = true
+		}
+
+		for _, sl := range []string{"lenmin", "lenmax", "valmin", "valmax", "regexp", "link:"} {
+			if helperError != nil {
+				break
 			}
-			if t == "email" {
-				email = true
-			}
-			for _, sl := range []string{"lenmin", "lenmax", "valmin", "valmax", "regexp"} {
-				if strings.HasPrefix(t, sl+":") {
-					lStr := strings.Replace(t, sl+":", "", 1)
-					/*matched, err := regexp.Match(`^[0-9]+$`, []byte(lStr))
+			if strings.HasPrefix(t, sl+":") {
+				lStr := strings.Replace(t, sl+":", "", 1)
+				if sl == "regexp" {
+					xs["regexp"] = lStr
+				} else if sl == "link" {
+					matched, err := regexp.Match(`^[a-zA-Z0-9]+$`, []byte(lStr))
 					if err != nil {
-						return false, 0, 0, "", false, 0, 0, "", fmt.Errorf("error with regexp.Match on " + sl)
+						helperError = &HelperError{
+							Op:  "ParseTag",
+							Tag: "link",
+							err: fmt.Errorf("regexp.Match failed: %w", err),
+						}
 					}
 					if !matched {
-						return false, 0, 0, "", false, 0, 0, "", fmt.Errorf(sl + " has invalid value")
-					}*/
-					if sl == "lenmin" {
-						lenmin, _ = strconv.Atoi(lStr)
-					} else if sl == "lenmax" {
-						lenmax, _ = strconv.Atoi(lStr)
-					} else if sl == "valmin" {
-						valmin, _ = strconv.Atoi(lStr)
-					} else if sl == "valmax" {
-						valmax, _ = strconv.Atoi(lStr)
-					} else if sl == "regexp" {
-						re = lStr
+						helperError = &HelperError{
+							Op:  "ParseTag",
+							Tag: "link",
+							err: errors.New("not int and gt 0"),
+						}
+					}
+					xs["link"] = lStr
+				} else {
+					i, err := strconv.Atoi(lStr)
+					if err != nil {
+						helperError = &HelperError{
+							Op:  "ParseTag",
+							Tag: sl,
+							err: fmt.Errorf("strconv.Atoi failed: %w", err),
+						}
+						break
+					} else {
+						xi[sl] = i
 					}
 				}
-			}
-			if strings.HasPrefix(t, "link:") {
-				lStr := strings.Replace(t, "link:", "", 1)
-				matched, err := regexp.Match(`^[a-zA-Z0-9]+$`, []byte(lStr))
-				if err != nil {
-					return false, 0, 0, "", false, 0, 0, "", fmt.Errorf("error with regexp.Match on link")
-				}
-				if !matched {
-					return false, 0, 0, "", false, 0, 0, "", fmt.Errorf("link has invalid value")
-				}
-				link = lStr
 			}
 		}
 	}
-	return req, lenmin, lenmax, link, email, valmin, valmax, re, nil
+
+	return xb["req"], xi["lenmin"], xi["lenmax"], xs["link"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
 }

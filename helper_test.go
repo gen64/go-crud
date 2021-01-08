@@ -17,7 +17,7 @@ type TestStruct struct {
 var ts = &TestStruct{}
 
 func TestSQLQueries(t *testing.T) {
-	h, _ := NewHelper(ts, "")
+	h := NewHelper(ts, "")
 
 	got := h.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS test_structs"
@@ -26,7 +26,7 @@ func TestSQLQueries(t *testing.T) {
 	}
 
 	got = h.GetQueryCreateTable()
-	want = "CREATE TABLE test_structs (test_struct_id SERIAL PRIMARY KEY, test_struct_flags BIGINT, email VARCHAR(255), age BIGINT, price BIGINT, currency_rate BIGINT, post_code VARCHAR(255))"
+	want = "CREATE TABLE test_structs (test_struct_id SERIAL PRIMARY KEY,test_struct_flags BIGINT,email VARCHAR(255),age BIGINT,price BIGINT,currency_rate BIGINT,post_code VARCHAR(255))"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
@@ -44,7 +44,7 @@ func TestSQLQueries(t *testing.T) {
 	}
 
 	got = h.GetQuerySelectById()
-	want = "SELECT test_struct_id, test_struct_flags, email, age, price, currency_rate, post_code FROM test_structs WHERE test_struct_id = $1"
+	want = "SELECT test_struct_id,test_struct_flags,email,age,price,currency_rate,post_code FROM test_structs WHERE test_struct_id = $1"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
@@ -62,10 +62,10 @@ func TestPluralName(t *testing.T) {
 	type ProductCategory struct{}
 	type UserCart struct{}
 
-	h1, _ := NewHelper(&Category{}, "")
-	h2, _ := NewHelper(&Cross{}, "")
-	h3, _ := NewHelper(&ProductCategory{}, "")
-	h4, _ := NewHelper(&UserCart{}, "")
+	h1 := NewHelper(&Category{}, "")
+	h2 := NewHelper(&Cross{}, "")
+	h3 := NewHelper(&ProductCategory{}, "")
+	h4 := NewHelper(&UserCart{}, "")
 
 	got := h1.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS categories"
@@ -93,7 +93,7 @@ func TestPluralName(t *testing.T) {
 }
 
 func TestValidationFields(t *testing.T) {
-	h, _ := NewHelper(ts, "")
+	h := NewHelper(ts, "")
 
 	got := h.reqFields
 	want := []int{2, 3, 4, 5, 6}
