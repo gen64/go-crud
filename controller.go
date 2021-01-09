@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
+	_ "log"
 	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+	"log"
 )
 
 // Controller is main component that manages database storage for structs and generates CRUDL HTTP handlers
@@ -21,61 +22,220 @@ type Controller struct {
 }
 
 // NewController returns new Controller struct
-func NewController() *Controller {
-	c := &Controller{}
+func NewController(db *sql.DB, p string) *Controller {
+	c := &Controller{
+		dbConn:        db,
+		dbTablePrefix: p,
+	}
 	return c
 }
 
-// SetDBTablePrefix sets a prefix for table names in the storage database, eg. 'app1_'
-func (mc *Controller) SetDBTablePrefix(p string) {
-	mc.dbTablePrefix = p
-}
-
-// AttachDBConn is required to be called just after Controller is initialized. It attaches database connection
-func (mc *Controller) AttachDBConn(db *sql.DB) {
-	mc.dbConn = db
-}
-
-// getHelper returns a special Helper struct that is assigned to every struct type
-func (mc *Controller) getHelper(m interface{}) (*Helper, error) {
-	v := reflect.ValueOf(m)
-	i := reflect.Indirect(v)
-	s := i.Type()
-	n := s.Name()
-
-	if mc.modelHelpers == nil {
-		mc.modelHelpers = make(map[string]*Helper)
-	}
-	if mc.modelHelpers[n] == nil {
-		h := NewHelper(m, mc.dbTablePrefix)
-		if h.Err() != nil {
-			return nil, fmt.Errorf("error with NewHelper in getHelper: %s", h.Err())
-		}
-		mc.modelHelpers[n] = h
-	}
-	return mc.modelHelpers[n], nil
-}
-
 // DropDBTables drop tables in the database for specified structs
-func (mc *Controller) DropDBTables(xm ...interface{}) error {
+func (mc *Controller) DropDBTables(xm ...interface{}) *ControllerError {
 	for _, m := range xm {
 		err := mc.DropDBTable(m)
 		if err != nil {
-			return fmt.Errorf("error with DropDBTable: %s", err)
+			return err
 		}
 	}
 	return nil
 }
 
 // CreateDBTables creates tables in the database for specified structs
-func (mc *Controller) CreateDBTables(xm ...interface{}) error {
+func (mc *Controller) CreateDBTables(xm ...interface{}) *ControllerError {
 	for _, m := range xm {
 		err := mc.CreateDBTable(m)
 		if err != nil {
-			return fmt.Errorf("error with CreateDBTable: %s", err)
+			return err
 		}
 	}
 	return nil
+}
+
+// CreateDBTable creates database table for specified struct
+func (mc *Controller) CreateDBTable(m interface{}) *ControllerError {
+	h, err := mc.getHelper(m)
+	if err != nil {
+		return err
+	}
+
+	_, err2 := mc.dbConn.Exec(h.GetQueryCreateTable())
+	if err2 != nil {
+		return &ControllerError{
+			Op: "DBQuery",
+			Err: err2,
+		}
+	}
+	return nil
+}
+
+// DropDBTable drops database table for specified struct
+func (mc *Controller) DropDBTable(m interface{}) *ControllerError {
+	h, err := mc.getHelper(m)
+	if err != nil {
+		return err
+	}
+
+	_, err2 := mc.dbConn.Exec(h.GetQueryDropTable())
+	if err2 != nil {
+		return &ControllerError{
+			Op: "DBQuery",
+			Err: err2,
+		}
+	}
+	return nil
+}
+
+// SaveToDB takes struct and saves it to database; calls either INSERT or UPDATE
+func (mc *Controller) SaveToDB(m interface{}) *ControllerError {
+	h, err := mc.getHelper(m)
+	if err != nil {
+		return err
+	}
+
+	b, _, err2 := mc.Validate(m)
+	if err2 != nil || !b {
+		return &ControllerError{
+			Op: "Validate",
+			Err: err2,
+		}
+	}
+
+	mc.populateLinks(m)
+
+	var err3 error
+	if mc.GetModelIDValue(m) != 0 {
+		_, err3 = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)
+	} else {
+		err3 = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
+	}
+	if err3 != nil {
+		return &ControllerError{
+			Op: "DBQuery",
+			Err: err3,
+		}
+	}
+	return nil
+}
+
+// SetFromDB sets struct fields from database record
+func (mc *Controller) SetFromDB(m interface{}, id string) *ControllerError {
+	idInt, err := strconv.Atoi(id)
+	if err != nil {
+		return &ControllerError{
+			Op: "IDToInt",
+			Err: err,
+		}
+	}
+
+	h, err2 := mc.getHelper(m)
+	if err2 != nil {
+		return err2
+	}
+
+	err = mc.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), mc.GetModelIDInterface(m)), mc.GetModelFieldInterfaces(m)...)...)
+	switch {
+	case err == sql.ErrNoRows:
+		mc.ResetFields(m)
+		return nil
+	case err != nil:
+		return &ControllerError{
+			Op: "DBQuery",
+			Err: err,
+		}
+	default:
+		return nil
+	}
+	return nil
+}
+
+// DeleteFromDB removes struct from the database storage
+func (mc *Controller) DeleteFromDB(m interface{}) *ControllerError {
+	h, err := mc.getHelper(m)
+	if err != nil {
+		return err
+	}
+	if mc.GetModelIDValue(m) == 0 {
+		return nil
+	}
+	_, err2 := mc.dbConn.Exec(h.GetQueryDeleteById(), mc.GetModelIDInterface(m))
+	if err2 != nil {
+		return &ControllerError{
+			Op: "DBQuery",
+			Err: err2,
+		}
+	}
+	mc.ResetFields(m)
+	return nil
+}
+
+// GetModelIDInterface returns interface to ID field of a specified struct
+func (mc *Controller) GetModelIDInterface(u interface{}) interface{} {
+	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
+}
+
+// GetModelIDValue returns value of ID field (int64) of a specified struct
+func (mc *Controller) GetModelIDValue(u interface{}) int64 {
+	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
+}
+
+// GetModelFieldInterfaces returns list of interfaces for struct fields, excluding the ID field
+func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
+	val := reflect.ValueOf(u).Elem()
+	var v []interface{}
+	for i := 1; i < val.NumField(); i++ {
+		valueField := val.Field(i)
+		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.Int && valueField.Kind() != reflect.String {
+			continue
+		}
+		v = append(v, valueField.Addr().Interface())
+	}
+	return v
+}
+
+// ResetFields zeroes struct field values
+func (mc *Controller) ResetFields(u interface{}) {
+	val := reflect.ValueOf(u).Elem()
+	for i := 0; i < val.NumField(); i++ {
+		valueField := val.Field(i)
+		if valueField.Kind() == reflect.Ptr {
+			valueField.Set(reflect.Zero(valueField.Type()))
+		}
+		if valueField.Kind() == reflect.Int64 {
+			valueField.SetInt(0)
+		}
+		if valueField.Kind() == reflect.Int {
+			valueField.SetInt(0)
+		}
+		if valueField.Kind() == reflect.String {
+			valueField.SetString("")
+		}
+	}
+}
+
+// GetHTTPHandler returns HTTP handler (func) that can be attached to HTTP server which creates a CRUDL endpoint for a specific struct
+func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
+		if !b {
+			return
+		}
+		if r.Method == http.MethodPut {
+			mc.handleHTTPPut(w, r, u, id)
+			return
+		}
+		if r.Method == http.MethodGet {
+			mc.handleHTTPGet(w, r, u, id)
+			return
+		}
+		if r.Method == http.MethodDelete {
+			mc.handleHTTPDelete(w, r, u, id)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	return fn
 }
 
 // Validate checks values of struct fields; returns bool if they are valid and list of names of invalid fields
@@ -85,7 +245,7 @@ func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 
 	h, err := mc.getHelper(m)
 	if err != nil {
-		return false, xi, fmt.Errorf("error with getHelper in Validate: %s", err)
+		return false, xi, err
 	}
 
 	val := reflect.ValueOf(m).Elem()
@@ -175,6 +335,30 @@ func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 	return b, xi, nil
 }
 
+// getHelper returns a special Helper struct that is used to parse fields' tags
+// and reflect struct fields to generate SQL queries and validation
+func (mc *Controller) getHelper(m interface{}) (*Helper, *ControllerError) {
+	v := reflect.ValueOf(m)
+	i := reflect.Indirect(v)
+	s := i.Type()
+	n := s.Name()
+
+	if mc.modelHelpers == nil {
+		mc.modelHelpers = make(map[string]*Helper)
+	}
+	if mc.modelHelpers[n] == nil {
+		h := NewHelper(m, mc.dbTablePrefix)
+		if h.Err() != nil {
+			return nil, &ControllerError{
+				Op: "GetHelper",
+				Err: h.Err(),
+			}
+		}
+		mc.modelHelpers[n] = h
+	}
+	return mc.modelHelpers[n], nil
+}
+
 // populateLinks gets ID of linked struct and sets it to apriopriate ID field (int64) of original struct
 func (mc *Controller) populateLinks(m interface{}) {
 	h, err := mc.getHelper(m)
@@ -195,186 +379,16 @@ func (mc *Controller) populateLinks(m interface{}) {
 	}
 }
 
-// CreateDBTable creates database table for specified struct
-func (mc *Controller) CreateDBTable(m interface{}) error {
-	h, err := mc.getHelper(m)
-	if err != nil {
-		return fmt.Errorf("error with getHelper in CreateDBTable: %s", err)
-	}
-
-	_, err = mc.dbConn.Exec(h.GetQueryCreateTable())
-	if err != nil {
-		return fmt.Errorf("error with db.Exec in CreateDBTable: %s", err)
-	}
-	return nil
-}
-
-// DropDBTable drops database table for specified struct
-func (mc *Controller) DropDBTable(m interface{}) error {
-	h, err := mc.getHelper(m)
-	if err != nil {
-		return fmt.Errorf("error with getHelper in DropDBTable: %s", err)
-	}
-
-	_, err = mc.dbConn.Exec(h.GetQueryDropTable())
-	if err != nil {
-		return fmt.Errorf("error with db.Exec in DropDBTable: %s", err)
-	}
-	return nil
-}
-
-// SaveToDB takes struct and saves it to database; calls either INSERT or UPDATE
-func (mc *Controller) SaveToDB(m interface{}) error {
-	h, err := mc.getHelper(m)
-	if err != nil {
-		return fmt.Errorf("error with getHelper in SaveToDB: %s", err)
-	}
-
-	b, _, err := mc.Validate(m)
-	if err != nil {
-		return fmt.Errorf("error with Validate in SaveToDB: %s", err)
-	}
-
-	if !b {
-		return fmt.Errorf("error with Validate in SaveToDB")
-	}
-
-	mc.populateLinks(m)
-
-	if mc.GetModelIDValue(m) != 0 {
-		_, err = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)
-	} else {
-		err = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
-	}
-	if err != nil {
-		return fmt.Errorf("error with db.Exec in SaveToDB: %s", err)
-	}
-	return nil
-}
-
-// SetFromDB sets struct fields from database record
-func (mc *Controller) SetFromDB(m interface{}, id string) error {
-	idInt, err := strconv.Atoi(id)
-	if err != nil {
-		return fmt.Errorf("error with strconv.Atoi in SetFromDB: %s", err)
-	}
-
-	h, err := mc.getHelper(m)
-	if err != nil {
-		return fmt.Errorf("error with getHelper in Validate: %s", err)
-	}
-
-	err = mc.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), mc.GetModelIDInterface(m)), mc.GetModelFieldInterfaces(m)...)...)
-	switch {
-	case err == sql.ErrNoRows:
-		mc.ResetFields(m)
-		return nil
-	case err != nil:
-		return fmt.Errorf("error with db.QueryRow in SetFromDB: %s", err)
-	default:
-		return nil
-	}
-	return nil
-}
-
-// DeleteFromDB removes struct from the database storage
-func (mc *Controller) DeleteFromDB(m interface{}) error {
-	h, err := mc.getHelper(m)
-	if err != nil {
-		return fmt.Errorf("error with getHelper in Validate: %s", err)
-	}
-	if mc.GetModelIDValue(m) == 0 {
-		return nil
-	}
-	_, err = mc.dbConn.Exec(h.GetQueryDeleteById(), mc.GetModelIDInterface(m))
-	if err != nil {
-		return fmt.Errorf("error with db.Exec in DeleteFromDB: %s", err)
-	}
-	mc.ResetFields(m)
-	return nil
-}
-
-// GetModelIDInterface returns interface to ID field of a specified struct
-func (mc *Controller) GetModelIDInterface(u interface{}) interface{} {
-	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
-}
-
-// GetModelIDValue returns value of ID field (int64) of a specified struct
-func (mc *Controller) GetModelIDValue(u interface{}) int64 {
-	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
-}
-
-// GetModelFieldInterfaces returns list of interfaces for struct fields, excluding the ID field
-func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
-	val := reflect.ValueOf(u).Elem()
-	var v []interface{}
-	for i := 1; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.Int && valueField.Kind() != reflect.String {
-			continue
-		}
-		v = append(v, valueField.Addr().Interface())
-	}
-	return v
-}
-
-// ResetFields zeroes struct field values
-func (mc *Controller) ResetFields(u interface{}) {
-	val := reflect.ValueOf(u).Elem()
-	for i := 0; i < val.NumField(); i++ {
-		valueField := val.Field(i)
-		if valueField.Kind() == reflect.Ptr {
-			valueField.Set(reflect.Zero(valueField.Type()))
-		}
-		if valueField.Kind() == reflect.Int64 {
-			valueField.SetInt(0)
-		}
-		if valueField.Kind() == reflect.Int {
-			valueField.SetInt(0)
-		}
-		if valueField.Kind() == reflect.String {
-			valueField.SetString("")
-		}
-	}
-}
-
-// GetHTTPHandler returns HTTP handler (func) that can be attached to HTTP server which creates a CRUDL endpoint for a specific struct
-func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
-		if !b {
-			return
-		}
-		if r.Method == http.MethodPut {
-			mc.handleHTTPPut(w, r, u, id)
-			return
-		}
-		if r.Method == http.MethodGet {
-			mc.handleHTTPGet(w, r, u, id)
-			return
-		}
-		if r.Method == http.MethodDelete {
-			mc.handleHTTPDelete(w, r, u, id)
-			return
-		}
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	return fn
-}
-
 func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		log.Print(err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	if id != "" {
-		err = mc.SetFromDB(u, id)
-		if err != nil {
-			log.Print(err)
+		err2 := mc.SetFromDB(u, id)
+		if err2 != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -399,9 +413,9 @@ func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u in
 		return
 	}
 
-	err = mc.SaveToDB(u)
-	if err != nil {
-		log.Print(err)
+	err2 := mc.SaveToDB(u)
+	if err2 != nil {
+		log.Print(err2)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -429,8 +443,8 @@ func (mc *Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, u in
 		return
 	}
 
-	j, err := json.Marshal(u)
-	if err != nil {
+	j, err2 := json.Marshal(u)
+	if err2 != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

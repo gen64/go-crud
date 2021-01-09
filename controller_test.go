@@ -260,9 +260,7 @@ func removeDocker() {
 
 func createController() {
 	if mc == nil {
-		mc = NewController()
-		mc.AttachDBConn(db)
-		mc.SetDBTablePrefix("f0x_")
+		mc = NewController(db, "f0x_")
 	}
 }
 

@@ -10,21 +10,6 @@ import (
 	"unicode"
 )
 
-// HelperError has details on failure in reflecting the struct
-type HelperError struct {
-	Op  string
-	Tag string
-	err error
-}
-
-func (e HelperError) Error() string {
-	return e.err.Error()
-}
-
-func (e HelperError) Unwrap() error {
-	return e.err
-}
-
 // Helper is used to generate Postgres SQL queries and parse validation defined in "crudl" tag so that can be attached to a specific struct type
 type Helper struct {
 	queryDropTable   string
@@ -188,7 +173,7 @@ func (m *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 			linkedField, linkedFound := s.FieldByName(link)
 			if !linkedFound {
 				m.err = &HelperError{
-					Op:  "GetLink",
+					Op:  "Link",
 					Tag: link,
 					err: errors.New("invalid link value"),
 				}

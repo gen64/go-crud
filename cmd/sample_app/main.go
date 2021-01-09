@@ -35,9 +35,7 @@ func main() {
 
 	defer conn.Close()
 
-	mc := crudl.NewController()
-	mc.AttachDBConn(conn)
-	mc.SetDBTablePrefix("f0x_")
+	mc := crudl.NewController(conn, "f0x_")
 
 	user := &User{}
 	session := &Session{}
