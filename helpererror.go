@@ -1,16 +1,17 @@
 package crudl
 
-// HelperError has details on failure in reflecting the struct
+// HelperError wraps original error with operation/step where the error occured
+// and optionally with a tag when parsing "crudl" failed
 type HelperError struct {
 	Op  string
 	Tag string
-	err error
+	Err error
 }
 
 func (e HelperError) Error() string {
-	return e.err.Error()
+	return e.Err.Error()
 }
 
 func (e HelperError) Unwrap() error {
-	return e.err
+	return e.Err
 }

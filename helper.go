@@ -10,7 +10,13 @@ import (
 	"unicode"
 )
 
-// Helper is used to generate Postgres SQL queries and parse validation defined in "crudl" tag so that can be attached to a specific struct type
+// Helper reflects the object to generate and cache PostgreSQL queries
+// (CREATE TABLE, INSERT, UPDATE etc.), and to setup validation rules for fields
+// (min. length, if it is required, regular expression it should match etc.).
+// Database table and column names are lowercase with underscore and they are
+// generated from field names.
+// Field validation is parsed out from the "crudl" tag.
+// Helper is created within Controller and there is no need to instantiate it
 type Helper struct {
 	queryDropTable   string
 	queryCreateTable string
@@ -30,85 +36,86 @@ type Helper struct {
 	err              *HelperError
 }
 
-// NewHelper returns new Helper struct
-func NewHelper(m interface{}, p string) *Helper {
+// NewHelper takes object and database table name prefix as arguments and
+// returns Helper instance
+func NewHelper(obj interface{}, dbTblPrefix string) *Helper {
 	h := &Helper{}
-	h.reflectStruct(m, p)
+	h.reflectStruct(obj, dbTblPrefix)
 	return h
 }
 
 // Err returns error that occurred when reflecting struct
-func (m *Helper) Err() *HelperError {
-	return m.err
+func (h *Helper) Err() *HelperError {
+	return h.err
 }
 
 // GetQueryDropTable returns drop table query
-func (m *Helper) GetQueryDropTable() string {
-	return m.queryDropTable
+func (h Helper) GetQueryDropTable() string {
+	return h.queryDropTable
 }
 
 // GetQueryCreateTable return create table query
-func (m *Helper) GetQueryCreateTable() string {
-	return m.queryCreateTable
+func (h Helper) GetQueryCreateTable() string {
+	return h.queryCreateTable
 }
 
 // GetQueryInsert returns insert query
-func (m *Helper) GetQueryInsert() string {
-	return m.queryInsert
+func (h *Helper) GetQueryInsert() string {
+	return h.queryInsert
 }
 
 // GetQueryUpdateById returns update query
-func (m *Helper) GetQueryUpdateById() string {
-	return m.queryUpdateById
+func (h *Helper) GetQueryUpdateById() string {
+	return h.queryUpdateById
 }
 
 // GetQuerySelectById returns select query
-func (m *Helper) GetQuerySelectById() string {
-	return m.querySelectById
+func (h *Helper) GetQuerySelectById() string {
+	return h.querySelectById
 }
 
 // GetQueryDeleteById returns delete query
-func (m *Helper) GetQueryDeleteById() string {
-	return m.queryDeleteById
+func (h *Helper) GetQueryDeleteById() string {
+	return h.queryDeleteById
 }
 
-func (m *Helper) setFieldFromTag(s string, j int) string {
-	req, lenmin, lenmax, link, email, valmin, valmax, re, err := m.parseTag(s)
+func (h *Helper) setFieldFromTag(s string, j int) string {
+	req, lenmin, lenmax, link, email, valmin, valmax, re, err := h.parseTag(s)
 	if err != nil {
-		m.err = err
+		h.err = err
 		return ""
 	}
 	if req {
-		m.reqFields = append(m.reqFields, j)
+		h.reqFields = append(h.reqFields, j)
 	}
 	if email {
-		m.emailFields = append(m.emailFields, j)
+		h.emailFields = append(h.emailFields, j)
 	}
 	if lenmin > -1 || lenmax > -1 {
-		m.lenFields = append(m.lenFields, [3]int{j, lenmin, lenmax})
+		h.lenFields = append(h.lenFields, [3]int{j, lenmin, lenmax})
 	}
 	if valmin > -1 || valmax > -1 {
-		m.valFields = append(m.valFields, [3]int{j, valmin, valmax})
+		h.valFields = append(h.valFields, [3]int{j, valmin, valmax})
 	}
 	if re != "" {
-		m.regexpFields[j] = regexp.MustCompile(re)
+		h.regexpFields[j] = regexp.MustCompile(re)
 	}
 	return link
 }
 
-func (m *Helper) getDBCol(n string) string {
+func (h *Helper) getDBCol(n string) string {
 	dbCol := ""
 	if n == "ID" {
-		dbCol = m.dbColPrefix + "_id"
+		dbCol = h.dbColPrefix + "_id"
 	} else if n == "Flags" {
-		dbCol = m.dbColPrefix + "_flags"
+		dbCol = h.dbColPrefix + "_flags"
 	} else {
-		dbCol = m.getUnderscoredName(n)
+		dbCol = h.getUnderscoredName(n)
 	}
 	return dbCol
 }
 
-func (m *Helper) getDBColParams(n string, t string) string {
+func (h *Helper) getDBColParams(n string, t string) string {
 	dbColParams := ""
 	if n == "ID" {
 		dbColParams = "SERIAL PRIMARY KEY"
@@ -129,7 +136,7 @@ func (m *Helper) getDBColParams(n string, t string) string {
 	return dbColParams
 }
 
-func (m *Helper) addWithComma(s string, v string) string {
+func (h *Helper) addWithComma(s string, v string) string {
 	if s != "" {
 		s += ","
 	}
@@ -137,26 +144,26 @@ func (m *Helper) addWithComma(s string, v string) string {
 	return s
 }
 
-func (m *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
+func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
 
-	usName := m.getUnderscoredName(s.Name())
-	usPluName := m.getPluralName(usName)
-	m.dbTbl = dbTablePrefix + usPluName
-	m.dbColPrefix = usName
-	m.url = usPluName
+	usName := h.getUnderscoredName(s.Name())
+	usPluName := h.getPluralName(usName)
+	h.dbTbl = dbTablePrefix + usPluName
+	h.dbColPrefix = usName
+	h.url = usPluName
 
-	m.reqFields = make([]int, 0)
-	m.lenFields = make([][3]int, 0)
-	m.linkFields = make([][2]int, 0)
-	m.valFields = make([][3]int, 0)
+	h.reqFields = make([]int, 0)
+	h.lenFields = make([][3]int, 0)
+	h.linkFields = make([][2]int, 0)
+	h.valFields = make([][3]int, 0)
 
 	var queryCreateTableCols, querySelectCols, queryUpdateCols, queryInsertCols, queryInsertVals string
 	var updateFieldCnt, insertFieldCnt int
 
-	m.regexpFields = make(map[int]*regexp.Regexp, 0)
+	h.regexpFields = make(map[int]*regexp.Regexp, 0)
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
@@ -164,48 +171,48 @@ func (m *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 			continue
 		}
 
-		link := m.setFieldFromTag(field.Tag.Get("crudl"), j)
-		if m.err != nil {
+		link := h.setFieldFromTag(field.Tag.Get("crudl"), j)
+		if h.err != nil {
 			return
 		}
 
 		if link != "" {
 			linkedField, linkedFound := s.FieldByName(link)
 			if !linkedFound {
-				m.err = &HelperError{
+				h.err = &HelperError{
 					Op:  "Link",
 					Tag: link,
-					err: errors.New("invalid link value"),
+					Err: errors.New("invalid link value"),
 				}
 				return
 			}
-			m.linkFields = append(m.linkFields, [2]int{j, linkedField.Index[0]})
+			h.linkFields = append(h.linkFields, [2]int{j, linkedField.Index[0]})
 		}
 
-		dbCol := m.getDBCol(field.Name)
-		dbColParams := m.getDBColParams(field.Name, field.Type.String())
+		dbCol := h.getDBCol(field.Name)
+		dbColParams := h.getDBColParams(field.Name, field.Type.String())
 
-		queryCreateTableCols = m.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)
-		querySelectCols = m.addWithComma(querySelectCols, dbCol)
+		queryCreateTableCols = h.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)
+		querySelectCols = h.addWithComma(querySelectCols, dbCol)
 		if field.Name != "ID" {
 			updateFieldCnt++
-			queryUpdateCols = m.addWithComma(queryUpdateCols, dbCol+"=$"+strconv.Itoa(updateFieldCnt))
+			queryUpdateCols = h.addWithComma(queryUpdateCols, dbCol+"=$"+strconv.Itoa(updateFieldCnt))
 
 			insertFieldCnt++
-			queryInsertCols = m.addWithComma(queryInsertCols, dbCol)
-			queryInsertVals = m.addWithComma(queryInsertVals, "$"+strconv.Itoa(insertFieldCnt))
+			queryInsertCols = h.addWithComma(queryInsertCols, dbCol)
+			queryInsertVals = h.addWithComma(queryInsertVals, "$"+strconv.Itoa(insertFieldCnt))
 		}
 	}
 
-	m.queryDropTable = "DROP TABLE IF EXISTS " + m.dbTbl
-	m.queryCreateTable = "CREATE TABLE " + m.dbTbl + " (" + queryCreateTableCols + ")"
-	m.queryDeleteById = "DELETE FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
-	m.querySelectById = "SELECT " + querySelectCols + " FROM " + m.dbTbl + " WHERE " + m.dbColPrefix + "_id = $1"
-	m.queryInsert = "INSERT INTO " + m.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + m.dbColPrefix + "_id"
-	m.queryUpdateById = "UPDATE " + m.dbTbl + " SET " + queryUpdateCols + " WHERE " + m.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt+1)
+	h.queryDropTable = "DROP TABLE IF EXISTS " + h.dbTbl
+	h.queryCreateTable = "CREATE TABLE " + h.dbTbl + " (" + queryCreateTableCols + ")"
+	h.queryDeleteById = "DELETE FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
+	h.querySelectById = "SELECT " + querySelectCols + " FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
+	h.queryInsert = "INSERT INTO " + h.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + h.dbColPrefix + "_id"
+	h.queryUpdateById = "UPDATE " + h.dbTbl + " SET " + queryUpdateCols + " WHERE " + h.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt+1)
 }
 
-func (m *Helper) getUnderscoredName(s string) string {
+func (h *Helper) getUnderscoredName(s string) string {
 	o := ""
 	var prev rune
 	for i, ch := range s {
@@ -227,7 +234,7 @@ func (m *Helper) getUnderscoredName(s string) string {
 	return o
 }
 
-func (m *Helper) getPluralName(s string) string {
+func (h *Helper) getPluralName(s string) string {
 	re := regexp.MustCompile(`y$`)
 	if re.MatchString(s) {
 		return string(re.ReplaceAll([]byte(s), []byte(`ies`)))
@@ -239,7 +246,7 @@ func (m *Helper) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (m *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, string, *HelperError) {
+func (h *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, string, *HelperError) {
 	xt := strings.SplitN(s, " ", -1)
 	xb := map[string]bool{
 		"req":   false,
@@ -284,14 +291,14 @@ func (m *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, str
 						helperError = &HelperError{
 							Op:  "ParseTag",
 							Tag: "link",
-							err: fmt.Errorf("regexp.Match failed: %w", err),
+							Err: fmt.Errorf("regexp.Match failed: %w", err),
 						}
 					}
 					if !matched {
 						helperError = &HelperError{
 							Op:  "ParseTag",
 							Tag: "link",
-							err: errors.New("not int and gt 0"),
+							Err: errors.New("not int and gt 0"),
 						}
 					}
 					xs["link"] = lStr
@@ -301,7 +308,7 @@ func (m *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, str
 						helperError = &HelperError{
 							Op:  "ParseTag",
 							Tag: sl,
-							err: fmt.Errorf("strconv.Atoi failed: %w", err),
+							Err: fmt.Errorf("strconv.Atoi failed: %w", err),
 						}
 						break
 					} else {

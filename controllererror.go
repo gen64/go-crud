@@ -1,8 +1,9 @@
 package crudl
 
-// ControllerError extends simple error with more details
+// ControllerError wraps original error that occurred in Err with name of the
+// operation/step that failed, which is in Op field
 type ControllerError struct {
-	Op string
+	Op  string
 	Err error
 }
 

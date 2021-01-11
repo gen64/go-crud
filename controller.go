@@ -5,35 +5,36 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	_ "log"
 	"net/http"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
-	"log"
 )
 
-// Controller is main component that manages database storage for structs and generates CRUDL HTTP handlers
+// Controller is the main component that gets and saves objects in the database
+// and generates CRUDL HTTP handler that can be attached to an HTTP server.
 type Controller struct {
-	dbConn        *sql.DB
-	dbTablePrefix string
-	modelHelpers  map[string]*Helper
+	dbConn       *sql.DB
+	dbTblPrefix  string
+	modelHelpers map[string]*Helper
 }
 
-// NewController returns new Controller struct
-func NewController(db *sql.DB, p string) *Controller {
+func NewController(dbConn *sql.DB, tblPrefix string) *Controller {
 	c := &Controller{
-		dbConn:        db,
-		dbTablePrefix: p,
+		dbConn:      dbConn,
+		dbTblPrefix: tblPrefix,
 	}
 	return c
 }
 
-// DropDBTables drop tables in the database for specified structs
-func (mc *Controller) DropDBTables(xm ...interface{}) *ControllerError {
-	for _, m := range xm {
-		err := mc.DropDBTable(m)
+// DropDBTables drop tables in the database for specified objects (see
+// DropDBTable for a single struct)
+func (c Controller) DropDBTables(xobj ...interface{}) *ControllerError {
+	for _, obj := range xobj {
+		err := c.DropDBTable(obj)
 		if err != nil {
 			return err
 		}
@@ -41,10 +42,11 @@ func (mc *Controller) DropDBTables(xm ...interface{}) *ControllerError {
 	return nil
 }
 
-// CreateDBTables creates tables in the database for specified structs
-func (mc *Controller) CreateDBTables(xm ...interface{}) *ControllerError {
-	for _, m := range xm {
-		err := mc.CreateDBTable(m)
+// CreateDBTables creates tables in the database for specified objects (see
+// CreateDBTable for a single struct)
+func (c Controller) CreateDBTables(xobj ...interface{}) *ControllerError {
+	for _, obj := range xobj {
+		err := c.CreateDBTable(obj)
 		if err != nil {
 			return err
 		}
@@ -52,95 +54,107 @@ func (mc *Controller) CreateDBTables(xm ...interface{}) *ControllerError {
 	return nil
 }
 
-// CreateDBTable creates database table for specified struct
-func (mc *Controller) CreateDBTable(m interface{}) *ControllerError {
-	h, err := mc.getHelper(m)
+// CreateDBTable creates database table to store specified type of objects. It
+// takes struct name and its fields, converts them into table and columns names
+// (all lowercase with underscore), assigns column type based on the field type,
+// and then executes "CREATE TABLE" query on attached DB connection
+func (c Controller) CreateDBTable(obj interface{}) *ControllerError {
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
 	}
 
-	_, err2 := mc.dbConn.Exec(h.GetQueryCreateTable())
+	_, err2 := c.dbConn.Exec(h.GetQueryCreateTable())
 	if err2 != nil {
 		return &ControllerError{
-			Op: "DBQuery",
+			Op:  "DBQuery",
 			Err: err2,
 		}
 	}
 	return nil
 }
 
-// DropDBTable drops database table for specified struct
-func (mc *Controller) DropDBTable(m interface{}) *ControllerError {
-	h, err := mc.getHelper(m)
+// DropDBTable drops database table used to store specified type of objects. It
+// just takes struct name, converts it to lowercase-with-underscore table name
+// and executes "DROP TABLE" query using attached DB connection
+func (c Controller) DropDBTable(obj interface{}) *ControllerError {
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
 	}
 
-	_, err2 := mc.dbConn.Exec(h.GetQueryDropTable())
+	_, err2 := c.dbConn.Exec(h.GetQueryDropTable())
 	if err2 != nil {
 		return &ControllerError{
-			Op: "DBQuery",
+			Op:  "DBQuery",
 			Err: err2,
 		}
 	}
 	return nil
 }
 
-// SaveToDB takes struct and saves it to database; calls either INSERT or UPDATE
-func (mc *Controller) SaveToDB(m interface{}) *ControllerError {
-	h, err := mc.getHelper(m)
+// SaveToDB takes object, validates its field values and saves it in the
+// database.
+// If ID field is already set (it's greater than 0) then the function assumes
+// that record with such ID already exists in the database and the function with
+// execute an "UPDATE" query. Otherwise it will be "INSERT". After inserting,
+// new record ID is set to struct's ID field
+func (c Controller) SaveToDB(obj interface{}) *ControllerError {
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
 	}
 
-	b, _, err2 := mc.Validate(m)
+	b, _, err2 := c.Validate(obj)
 	if err2 != nil || !b {
 		return &ControllerError{
-			Op: "Validate",
+			Op:  "Validate",
 			Err: err2,
 		}
 	}
 
-	mc.populateLinks(m)
+	c.populateLinks(obj)
 
 	var err3 error
-	if mc.GetModelIDValue(m) != 0 {
-		_, err3 = mc.dbConn.Exec(h.GetQueryUpdateById(), append(mc.GetModelFieldInterfaces(m), mc.GetModelIDInterface(m))...)
+	if c.GetModelIDValue(obj) != 0 {
+		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById(), append(c.GetModelFieldInterfaces(obj), c.GetModelIDInterface(obj))...)
 	} else {
-		err3 = mc.dbConn.QueryRow(h.GetQueryInsert(), mc.GetModelFieldInterfaces(m)...).Scan(mc.GetModelIDInterface(m))
+		err3 = c.dbConn.QueryRow(h.GetQueryInsert(), c.GetModelFieldInterfaces(obj)...).Scan(c.GetModelIDInterface(obj))
 	}
 	if err3 != nil {
 		return &ControllerError{
-			Op: "DBQuery",
+			Op:  "DBQuery",
 			Err: err3,
 		}
 	}
 	return nil
 }
 
-// SetFromDB sets struct fields from database record
-func (mc *Controller) SetFromDB(m interface{}, id string) *ControllerError {
+// SetFromDB sets object's fields with values from the database table with a
+// specific id. If record does not exist in the database, all field values in
+// the struct are zeroed
+func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
 		return &ControllerError{
-			Op: "IDToInt",
+			Op:  "IDToInt",
 			Err: err,
 		}
 	}
 
-	h, err2 := mc.getHelper(m)
+	h, err2 := c.getHelper(obj)
 	if err2 != nil {
 		return err2
 	}
 
-	err = mc.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), mc.GetModelIDInterface(m)), mc.GetModelFieldInterfaces(m)...)...)
+	err3 := c.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(obj)...)...)
 	switch {
-	case err == sql.ErrNoRows:
-		mc.ResetFields(m)
+	case err3 == sql.ErrNoRows:
+		c.ResetFields(obj)
 		return nil
-	case err != nil:
+	case err3 != nil:
 		return &ControllerError{
-			Op: "DBQuery",
+			Op:  "DBQuery",
 			Err: err,
 		}
 	default:
@@ -149,39 +163,42 @@ func (mc *Controller) SetFromDB(m interface{}, id string) *ControllerError {
 	return nil
 }
 
-// DeleteFromDB removes struct from the database storage
-func (mc *Controller) DeleteFromDB(m interface{}) *ControllerError {
-	h, err := mc.getHelper(m)
+// DeleteFromDB removes object from the database table and it does that only
+// when ID field is set (greater than 0). Once deleted from the DB, all field
+// values are zeroed
+func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
 	}
-	if mc.GetModelIDValue(m) == 0 {
+	if c.GetModelIDValue(obj) == 0 {
 		return nil
 	}
-	_, err2 := mc.dbConn.Exec(h.GetQueryDeleteById(), mc.GetModelIDInterface(m))
+	_, err2 := c.dbConn.Exec(h.GetQueryDeleteById(), c.GetModelIDInterface(obj))
 	if err2 != nil {
 		return &ControllerError{
-			Op: "DBQuery",
+			Op:  "DBQuery",
 			Err: err2,
 		}
 	}
-	mc.ResetFields(m)
+	c.ResetFields(obj)
 	return nil
 }
 
-// GetModelIDInterface returns interface to ID field of a specified struct
-func (mc *Controller) GetModelIDInterface(u interface{}) interface{} {
-	return reflect.ValueOf(u).Elem().FieldByName("ID").Addr().Interface()
+// GetModelIDInterface returns an interface{} to ID field of an object
+func (c *Controller) GetModelIDInterface(obj interface{}) interface{} {
+	return reflect.ValueOf(obj).Elem().FieldByName("ID").Addr().Interface()
 }
 
-// GetModelIDValue returns value of ID field (int64) of a specified struct
-func (mc *Controller) GetModelIDValue(u interface{}) int64 {
-	return reflect.ValueOf(u).Elem().FieldByName("ID").Int()
+// GetModelIDValue returns value of ID field (int64) of an object
+func (c *Controller) GetModelIDValue(obj interface{}) int64 {
+	return reflect.ValueOf(obj).Elem().FieldByName("ID").Int()
 }
 
-// GetModelFieldInterfaces returns list of interfaces for struct fields, excluding the ID field
-func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
-	val := reflect.ValueOf(u).Elem()
+// GetModelFieldInterfaces returns list of interfaces to object's fields without
+// the ID field
+func (c Controller) GetModelFieldInterfaces(obj interface{}) []interface{} {
+	val := reflect.ValueOf(obj).Elem()
 	var v []interface{}
 	for i := 1; i < val.NumField(); i++ {
 		valueField := val.Field(i)
@@ -193,9 +210,9 @@ func (mc *Controller) GetModelFieldInterfaces(u interface{}) []interface{} {
 	return v
 }
 
-// ResetFields zeroes struct field values
-func (mc *Controller) ResetFields(u interface{}) {
-	val := reflect.ValueOf(u).Elem()
+// ResetFields zeroes object's field values
+func (c Controller) ResetFields(obj interface{}) {
+	val := reflect.ValueOf(obj).Elem()
 	for i := 0; i < val.NumField(); i++ {
 		valueField := val.Field(i)
 		if valueField.Kind() == reflect.Ptr {
@@ -213,23 +230,27 @@ func (mc *Controller) ResetFields(u interface{}) {
 	}
 }
 
-// GetHTTPHandler returns HTTP handler (func) that can be attached to HTTP server which creates a CRUDL endpoint for a specific struct
-func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+// GetHTTPHandler returns a CRUDL HTTP handler that can be attached to HTTP
+// server. It creates a CRUDL endpoint for PUT, GET and DELETE methods. Listing
+// many records is not yet implemented.
+// It's important to pass "uri" argument same as the one that the handler is
+// attached to.
+func (c Controller) GetHTTPHandler(obj interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		id, b := mc.getIDFromURI(r.RequestURI[len(uri):], w)
+		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
 		}
 		if r.Method == http.MethodPut {
-			mc.handleHTTPPut(w, r, u, id)
+			c.handleHTTPPut(w, r, obj, id)
 			return
 		}
 		if r.Method == http.MethodGet {
-			mc.handleHTTPGet(w, r, u, id)
+			c.handleHTTPGet(w, r, obj, id)
 			return
 		}
 		if r.Method == http.MethodDelete {
-			mc.handleHTTPDelete(w, r, u, id)
+			c.handleHTTPDelete(w, r, obj, id)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -238,17 +259,18 @@ func (mc *Controller) GetHTTPHandler(u interface{}, uri string) func(http.Respon
 	return fn
 }
 
-// Validate checks values of struct fields; returns bool if they are valid and list of names of invalid fields
-func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
+// Validate checks object's fields. It returns result of validation as
+// a bool and list of fields with invalid value
+func (c Controller) Validate(obj interface{}) (bool, []int, error) {
 	xi := []int{}
 	b := true
 
-	h, err := mc.getHelper(m)
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return false, xi, err
 	}
 
-	val := reflect.ValueOf(m).Elem()
+	val := reflect.ValueOf(obj).Elem()
 	for j := 0; j < len(h.reqFields); j++ {
 		valueField := val.Field(h.reqFields[j])
 		if valueField.Type().Name() == "string" && valueField.String() == "" {
@@ -269,7 +291,7 @@ func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 					if valueLinkField.IsNil() {
 						bf = false
 					} else {
-						linkedId := mc.GetModelIDValue(reflect.Indirect(valueLinkField).Addr().Interface())
+						linkedId := c.GetModelIDValue(reflect.Indirect(valueLinkField).Addr().Interface())
 						if linkedId == 0 {
 							bf = false
 						}
@@ -335,43 +357,48 @@ func (mc *Controller) Validate(m interface{}) (bool, []int, error) {
 	return b, xi, nil
 }
 
-// getHelper returns a special Helper struct that is used to parse fields' tags
-// and reflect struct fields to generate SQL queries and validation
-func (mc *Controller) getHelper(m interface{}) (*Helper, *ControllerError) {
-	v := reflect.ValueOf(m)
+// getHelper returns a special Helper instance which reflects the struct type
+// to get SQL queries, validation etc.
+func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
+	v := reflect.ValueOf(obj)
 	i := reflect.Indirect(v)
 	s := i.Type()
 	n := s.Name()
 
-	if mc.modelHelpers == nil {
-		mc.modelHelpers = make(map[string]*Helper)
+	if c.modelHelpers == nil {
+		c.modelHelpers = make(map[string]*Helper)
 	}
-	if mc.modelHelpers[n] == nil {
-		h := NewHelper(m, mc.dbTablePrefix)
+	if c.modelHelpers[n] == nil {
+		h := NewHelper(obj, c.dbTblPrefix)
 		if h.Err() != nil {
 			return nil, &ControllerError{
-				Op: "GetHelper",
+				Op:  "GetHelper",
 				Err: h.Err(),
 			}
 		}
-		mc.modelHelpers[n] = h
+		c.modelHelpers[n] = h
 	}
-	return mc.modelHelpers[n], nil
+	return c.modelHelpers[n], nil
 }
 
-// populateLinks gets ID of linked struct and sets it to apriopriate ID field (int64) of original struct
-func (mc *Controller) populateLinks(m interface{}) {
-	h, err := mc.getHelper(m)
+// populateLinks is used when there is an int64 field (eg. CreatedByID int64)
+// which is a link (foreign key) to another object (eg. User), and field of
+// struct type which is an instance of that link (eg. CreatedBy User), to copy
+// ID from the instance to the int64 field (eg. CreatedBy.ID to CreatedByID).
+// However, it only works when the linked object exists in the database
+// (see SaveToDB)
+func (c Controller) populateLinks(obj interface{}) {
+	h, err := c.getHelper(obj)
 	if err != nil {
 		return
 	}
 
-	val := reflect.ValueOf(m).Elem()
+	val := reflect.ValueOf(obj).Elem()
 	for l := 0; l < len(h.linkFields); l++ {
 		valueTargetField := val.Field(h.linkFields[l][0])
 		valueSourceField := val.Field(h.linkFields[l][1])
 		if !valueSourceField.IsNil() {
-			linkedId := mc.GetModelIDValue(reflect.Indirect(valueSourceField).Addr().Interface())
+			linkedId := c.GetModelIDValue(reflect.Indirect(valueSourceField).Addr().Interface())
 			if linkedId != 0 {
 				valueTargetField.SetInt(linkedId)
 			}
@@ -379,7 +406,7 @@ func (mc *Controller) populateLinks(m interface{}) {
 	}
 }
 
-func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -387,33 +414,33 @@ func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u in
 	}
 
 	if id != "" {
-		err2 := mc.SetFromDB(u, id)
+		err2 := c.SetFromDB(obj, id)
 		if err2 != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if mc.GetModelIDValue(u) == 0 {
+		if c.GetModelIDValue(obj) == 0 {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 	} else {
-		mc.ResetFields(u)
+		c.ResetFields(obj)
 	}
 
-	err = json.Unmarshal(body, u)
+	err = json.Unmarshal(body, obj)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	b, _, err := mc.Validate(u)
+	b, _, err := c.Validate(obj)
 	if !b || err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("{\"err\":\"validation failed: %s\"}", err)))
 		return
 	}
 
-	err2 := mc.SaveToDB(u)
+	err2 := c.SaveToDB(obj)
 	if err2 != nil {
 		log.Print(err2)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -421,29 +448,29 @@ func (mc *Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, u in
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(mc.jsonID(mc.GetModelIDValue(u)))
+	w.Write(c.jsonID(c.GetModelIDValue(obj)))
 	return
 }
 
-func (mc *Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(mc.jsonError("id missing"))
+		w.Write(c.jsonError("id missing"))
 		return
 	}
 
-	err := mc.SetFromDB(u, id)
+	err := c.SetFromDB(obj, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if mc.GetModelIDValue(u) == 0 {
+	if c.GetModelIDValue(obj) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	j, err2 := json.Marshal(u)
+	j, err2 := json.Marshal(obj)
 	if err2 != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -454,24 +481,24 @@ func (mc *Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, u in
 	return
 }
 
-func (mc *Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, u interface{}, id string) {
+func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write(mc.jsonError("id missing"))
+		w.Write(c.jsonError("id missing"))
 		return
 	}
 
-	err := mc.SetFromDB(u, id)
+	err := c.SetFromDB(obj, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if mc.GetModelIDValue(u) == 0 {
+	if c.GetModelIDValue(obj) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	err = mc.DeleteFromDB(u)
+	err = c.DeleteFromDB(obj)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -481,7 +508,7 @@ func (mc *Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, u
 	return
 }
 
-func (mc *Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
+func (c Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
 	xs := strings.SplitN(uri, "?", 2)
 	if xs[0] == "" {
 		return "", true
@@ -489,17 +516,17 @@ func (mc *Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, b
 		matched, err := regexp.Match(`^[0-9]+$`, []byte(xs[0]))
 		if err != nil || !matched {
 			w.WriteHeader(http.StatusBadRequest)
-			w.Write(mc.jsonError("invalid id"))
+			w.Write(c.jsonError("invalid id"))
 			return "", false
 		}
 		return xs[0], true
 	}
 }
 
-func (mc *Controller) jsonError(e string) []byte {
+func (c Controller) jsonError(e string) []byte {
 	return []byte(fmt.Sprintf("{\"err\":\"%s\"}", e))
 }
 
-func (mc *Controller) jsonID(id int64) []byte {
+func (c Controller) jsonID(id int64) []byte {
 	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
 }
