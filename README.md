@@ -13,7 +13,7 @@ For example, a struct can be something as follows (note the tags):
 type User struct {
 	ID        int64  `json:"user_id"`
 	Email     string `json:"email" crudl:"req email"`
-	Name      string `json:"name", crudl:"lenmax:255"`
+	Name      string `json:"name" crudl:"lenmax:255"`
 	CreatedAt int64  `json:"created_at"`
 }
 ```
