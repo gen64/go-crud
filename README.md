@@ -64,24 +64,3 @@ Here is how JSON input would look like for previously shown User struct.
 	"created_at": "1610356241"
 }
 ```
-
-
-## TODO
-### Linked object
-We have the following structs.
-```
-	user := &User{}
-	type Session struct {
-		...
-		UserID int64 `json:"user_id" crudl:"req link:User"`
-		User   *User `json:"user, omit_empty"`
-	}
-	session := &Session{
-		...
-		User: user,
-	}
-```
-
-When `c.SaveToDB(session)` is called and `user` already exists in the database
-then its `ID` field value should be copied over to `UserID`. Otherwise, `UserID`
-should not change.

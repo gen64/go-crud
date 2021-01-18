@@ -113,8 +113,6 @@ func (c Controller) SaveToDB(obj interface{}) *ControllerError {
 		}
 	}
 
-	c.populateLinks(obj)
-
 	var err3 error
 	if c.GetModelIDValue(obj) != 0 {
 		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById(), append(c.GetModelFieldInterfaces(obj), c.GetModelIDInterface(obj))...)
@@ -381,31 +379,6 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
 	return c.modelHelpers[n], nil
 }
 
-// populateLinks is used when there is an int64 field (eg. CreatedByID int64)
-// which is a link (foreign key) to another object (eg. User), and field of
-// struct type which is an instance of that link (eg. CreatedBy User), to copy
-// ID from the instance to the int64 field (eg. CreatedBy.ID to CreatedByID).
-// However, it only works when the linked object exists in the database
-// (see SaveToDB)
-func (c Controller) populateLinks(obj interface{}) {
-	h, err := c.getHelper(obj)
-	if err != nil {
-		return
-	}
-
-	val := reflect.ValueOf(obj).Elem()
-	for l := 0; l < len(h.linkFields); l++ {
-		valueTargetField := val.Field(h.linkFields[l][0])
-		valueSourceField := val.Field(h.linkFields[l][1])
-		if !valueSourceField.IsNil() {
-			linkedId := c.GetModelIDValue(reflect.Indirect(valueSourceField).Addr().Interface())
-			if linkedId != 0 {
-				valueTargetField.SetInt(linkedId)
-			}
-		}
-	}
-}
-
 func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
@@ -413,34 +386,36 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, obj in
 		return
 	}
 
+	objClone := obj
+
 	if id != "" {
-		err2 := c.SetFromDB(obj, id)
+		err2 := c.SetFromDB(objClone, id)
 		if err2 != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		if c.GetModelIDValue(obj) == 0 {
+		if c.GetModelIDValue(objClone) == 0 {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 	} else {
-		c.ResetFields(obj)
+		c.ResetFields(objClone)
 	}
 
-	err = json.Unmarshal(body, obj)
+	err = json.Unmarshal(body, objClone)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	b, _, err := c.Validate(obj)
+	b, _, err := c.Validate(objClone)
 	if !b || err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("{\"err\":\"validation failed: %s\"}", err)))
 		return
 	}
 
-	err2 := c.SaveToDB(obj)
+	err2 := c.SaveToDB(objClone)
 	if err2 != nil {
 		log.Print(err2)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -459,18 +434,20 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, obj in
 		return
 	}
 
-	err := c.SetFromDB(obj, id)
+	objClone := obj
+
+	err := c.SetFromDB(objClone, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if c.GetModelIDValue(obj) == 0 {
+	if c.GetModelIDValue(objClone) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	j, err2 := json.Marshal(obj)
+	j, err2 := json.Marshal(objClone)
 	if err2 != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -488,17 +465,19 @@ func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, obj
 		return
 	}
 
-	err := c.SetFromDB(obj, id)
+	objClone := obj
+
+	err := c.SetFromDB(objClone, id)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	if c.GetModelIDValue(obj) == 0 {
+	if c.GetModelIDValue(objClone) == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	err = c.DeleteFromDB(obj)
+	err = c.DeleteFromDB(objClone)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return

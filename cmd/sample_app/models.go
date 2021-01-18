@@ -8,8 +8,6 @@ type User struct {
 	EmailActivationKey string `json:"email_activation_key"`
 	CreatedAt          int64  `json:"created_at"`
 	CreatedByUserID    int64  `json:"created_by_user_id" crudl:"link:CreatedByUser"`
-
-	CreatedByUser *User `json:"user,omit_empty"`
 }
 
 type Session struct {
@@ -18,8 +16,6 @@ type Session struct {
 	Key       string `json:"session_key" crudl:"lenmax:50"`
 	ExpiresAt int64  `json:"expires_at" crudl:"req"`
 	UserID    int64  `json:"user_id" crudl:"req link:User"`
-
-	User *User `json:"user,omit_empty"`
 }
 
 type Something struct {
