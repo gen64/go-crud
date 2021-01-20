@@ -1,7 +1,7 @@
-package crudl
+package crud
 
 // HelperError wraps original error with operation/step where the error occured
-// and optionally with a tag when parsing "crudl" failed
+// and optionally with a tag when parsing "crud" failed
 type HelperError struct {
 	Op  string
 	Tag string

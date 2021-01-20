@@ -1,4 +1,4 @@
-package crudl
+package crud
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ import (
 // (min. length, if it is required, regular expression it should match etc.).
 // Database table and column names are lowercase with underscore and they are
 // generated from field names.
-// Field validation is parsed out from the "crudl" tag.
+// Field validation is parsed out from the "crud" tag.
 // Helper is created within Controller and there is no need to instantiate it
 type Helper struct {
 	queryDropTable   string
@@ -171,7 +171,7 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 			continue
 		}
 
-		link := h.setFieldFromTag(field.Tag.Get("crudl"), j)
+		link := h.setFieldFromTag(field.Tag.Get("crud"), j)
 		if h.err != nil {
 			return
 		}

@@ -1,4 +1,4 @@
-package crudl
+package crud
 
 // ControllerError wraps original error that occurred in Err with name of the
 // operation/step that failed, which is in Op field

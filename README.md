@@ -1,6 +1,6 @@
-# go-crudl
+# go-crud
 
-[![Build Status](https://travis-ci.com/gen64/go-crudl.svg?branch=main)](https://travis-ci.com/gen64/go-crudl)
+[![Build Status](https://travis-ci.com/gen64/go-crud.svg?branch=main)](https://travis-ci.com/gen64/go-crud)
 
 Package CRUDL is meant to make two things: map structs to PostgreSQL tables
 (like ORM) and create CRUDL HTTP endpoint for simple data management.

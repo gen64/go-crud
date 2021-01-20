@@ -1,4 +1,4 @@
-module github.com/gen64/go-crudl
+module github.com/gen64/go-crud
 
 go 1.15
 
