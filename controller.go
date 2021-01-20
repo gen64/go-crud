@@ -15,7 +15,7 @@ import (
 )
 
 // Controller is the main component that gets and saves objects in the database
-// and generates CRUDL HTTP handler that can be attached to an HTTP server.
+// and generates CRUD HTTP handler that can be attached to an HTTP server.
 type Controller struct {
 	dbConn       *sql.DB
 	dbTblPrefix  string
@@ -228,8 +228,8 @@ func (c Controller) ResetFields(obj interface{}) {
 	}
 }
 
-// GetHTTPHandler returns a CRUDL HTTP handler that can be attached to HTTP
-// server. It creates a CRUDL endpoint for PUT, GET and DELETE methods. Listing
+// GetHTTPHandler returns a CRUD HTTP handler that can be attached to HTTP
+// server. It creates a CRUD endpoint for PUT, GET and DELETE methods. Listing
 // many records is not yet implemented.
 // It's important to pass "uri" argument same as the one that the handler is
 // attached to.

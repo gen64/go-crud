@@ -1,5 +1,5 @@
-// Package CRUDL is meant to make two things: map structs to PostgreSQL tables
-// (like ORM) and create CRUDL HTTP endpoint for simple data management.
+// Package CRUD is meant to make two things: map structs to PostgreSQL tables
+// (like ORM) and create CRUD HTTP endpoint for simple data management.
 //
 // For example, a struct can be something as follows (note the tags):
 //	type User struct {
@@ -31,7 +31,7 @@
 //
 //	err = c.DropDBTable(user) // runs DROP TABLE
 //
-// Finally, here is an example of creating CRUDL HTTP endpoint.
+// Finally, here is an example of creating CRUD HTTP endpoint.
 //	http.HandleFunc("/users/", c.GetHTTPHandler(user, "/users/"))
 //	log.Fatal(http.ListenAndServe(":9001", nil))
 // With above, you can send a JSON payload using PUT method to /users/

@@ -2,8 +2,8 @@
 
 [![Build Status](https://travis-ci.com/gen64/go-crud.svg?branch=main)](https://travis-ci.com/gen64/go-crud)
 
-Package CRUDL is meant to make two things: map structs to PostgreSQL tables
-(like ORM) and create CRUDL HTTP endpoint for simple data management.
+Package CRUD is meant to make two things: map structs to PostgreSQL tables
+(like ORM) and create CRUD HTTP endpoint for simple data management.
 
 ## Example usage
 ### Struct
@@ -44,7 +44,7 @@ err = c.DropDBTable(user) // runs DROP TABLE
 ```
 
 ### HTTP Handler
-Finally, here is an example of creating CRUDL HTTP endpoint.
+Finally, here is an example of creating CRUD HTTP endpoint.
 
 ```
 http.HandleFunc("/users/", c.GetHTTPHandler(user, "/users/"))
