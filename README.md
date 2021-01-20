@@ -12,8 +12,8 @@ For example, a struct can be something as follows (note the tags):
 ```
 type User struct {
 	ID        int64  `json:"user_id"`
-	Email     string `json:"email" crudl:"req email"`
-	Name      string `json:"name" crudl:"lenmax:255"`
+	Email     string `json:"email" crud:"req email"`
+	Name      string `json:"name" crud:"lenmax:255"`
 	CreatedAt int64  `json:"created_at"`
 }
 ```
@@ -26,7 +26,7 @@ it and deleting.
 conn, _ := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost,Port, dbUser, dbPass, dbName))
 defer conn.Close()
 
-c := crudl.NewController(conn, "app1_")
+c := crud.NewController(conn, "app1_")
 user := &User{}
 err = c.CreateDBTable(user) // runs CREATE TABLE
 

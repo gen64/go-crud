@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 	"time"
-	"github.com/gen64/go-crudl"
+	"github.com/gen64/go-crud"
 	"net/http"
 
 	_ "github.com/lib/pq"
@@ -35,7 +35,7 @@ func main() {
 
 	defer conn.Close()
 
-	mc := crudl.NewController(conn, "f0x_")
+	mc := crud.NewController(conn, "f0x_")
 
 	user := &User{}
 	session := &Session{}
