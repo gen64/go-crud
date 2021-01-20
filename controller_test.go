@@ -299,8 +299,9 @@ func createHTTPServer() {
 		ctx, cancelHTTPCtx = context.WithCancel(context.Background())
 		go func(ctx context.Context) {
 			go func() {
-				ts1 := &TestStruct1{}
-				http.HandleFunc("/"+httpURI+"/", mc.GetHTTPHandler(ts1, "/"+httpURI+"/"))
+				http.HandleFunc("/"+httpURI+"/", mc.GetHTTPHandler(func() interface{} {
+					return &TestStruct1{}
+				}, "/"+httpURI+"/"))
 				http.ListenAndServe(":"+httpPort, nil)
 			}()
 		}(ctx)

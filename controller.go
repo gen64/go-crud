@@ -233,22 +233,22 @@ func (c Controller) ResetFields(obj interface{}) {
 // many records is not yet implemented.
 // It's important to pass "uri" argument same as the one that the handler is
 // attached to.
-func (c Controller) GetHTTPHandler(obj interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
 		}
 		if r.Method == http.MethodPut {
-			c.handleHTTPPut(w, r, obj, id)
+			c.handleHTTPPut(w, r, newObjFunc, id)
 			return
 		}
 		if r.Method == http.MethodGet {
-			c.handleHTTPGet(w, r, obj, id)
+			c.handleHTTPGet(w, r, newObjFunc, id)
 			return
 		}
 		if r.Method == http.MethodDelete {
-			c.handleHTTPDelete(w, r, obj, id)
+			c.handleHTTPDelete(w, r, newObjFunc, id)
 			return
 		}
 		w.WriteHeader(http.StatusBadRequest)
@@ -379,14 +379,14 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
 	return c.modelHelpers[n], nil
 }
 
-func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
+func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	objClone := obj
+	objClone := newObjFunc()
 
 	if id != "" {
 		err2 := c.SetFromDB(objClone, id)
@@ -423,18 +423,18 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, obj in
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(c.jsonID(c.GetModelIDValue(obj)))
+	w.Write(c.jsonID(c.GetModelIDValue(objClone)))
 	return
 }
 
-func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
+func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(c.jsonError("id missing"))
 		return
 	}
 
-	objClone := obj
+	objClone := newObjFunc()
 
 	err := c.SetFromDB(objClone, id)
 	if err != nil {
@@ -458,14 +458,14 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, obj in
 	return
 }
 
-func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, obj interface{}, id string) {
+func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	if id == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write(c.jsonError("id missing"))
 		return
 	}
 
-	objClone := obj
+	objClone := newObjFunc()
 
 	err := c.SetFromDB(objClone, id)
 	if err != nil {

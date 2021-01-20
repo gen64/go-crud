@@ -56,6 +56,8 @@ func main() {
 		log.Printf("Error with CreateTables: %s", err)
 	}
 
-	http.HandleFunc("/users/", mc.GetHTTPHandler(user, "/users/"))
+	http.HandleFunc("/users/", mc.GetHTTPHandler(func() interface{} {
+		return &User
+	}, "/users/"))
 	log.Fatal(http.ListenAndServe(":9001", nil))
 }
