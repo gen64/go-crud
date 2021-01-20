@@ -57,7 +57,7 @@ func main() {
 	}
 
 	http.HandleFunc("/users/", mc.GetHTTPHandler(func() interface{} {
-		return &User
+		return &User{}
 	}, "/users/"))
 	log.Fatal(http.ListenAndServe(":9001", nil))
 }
