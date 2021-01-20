@@ -95,8 +95,8 @@ func TestPluralName(t *testing.T) {
 func TestValidationFields(t *testing.T) {
 	h := NewHelper(ts, "")
 
-	got := h.reqFields
-	want := []int{2, 3, 4, 5, 6}
+	got := h.fieldsRequired
+	want := map[string]bool{"Email": true, "Age": true, "Price": true, "CurrencyRate": true, "PostCode": true}
 	if len(got) != len(want) {
 		t.Fatalf("Want %v, got %v", len(want), len(got))
 	}
@@ -106,27 +106,27 @@ func TestValidationFields(t *testing.T) {
 		}
 	}
 
-	got2 := h.lenFields
-	want2 := [][3]int{{2, 10, 255}, {6, 6, -1}}
+	got2 := h.fieldsLength
+	want2 := map[string][2]int{"Email": [2]int{10, 255}, "PostCode": [2]int{6, -1}}
 	if len(got2) != len(want2) {
 		t.Fatalf("Want %v, got %v", len(want2), len(got2))
 	}
-	if len(got2[0]) != len(want2[0]) {
-		t.Fatalf("Want %v, got %v", len(want2), len(got2))
+	if len(got2["Email"]) != len(want2["Email"]) {
+		t.Fatalf("Want %v, got %v", len(want2["Email"]), len(got2["Email"]))
 	}
-	if len(got2[1]) != len(want2[1]) {
-		t.Fatalf("Want %v, got %v", len(want2), len(got2))
+	if len(got2["PostCode"]) != len(want2["PostCode"]) {
+		t.Fatalf("Want %v, got %v", len(want2["PostCode"]), len(got2["PostCode"]))
 	}
-	for i, _ := range got2 {
-		for j := 0; j < 3; j++ {
-			if got2[i][j] != want2[i][j] {
-				t.Fatalf("Want %v, got %v", want2[i][j], got2[i][j])
+	for k, _ := range got2 {
+		for j := 0; j < 2; j++ {
+			if got2[k][j] != want2[k][j] {
+				t.Fatalf("Want %v, got %v", want2[k][j], got2[k][j])
 			}
 		}
 	}
 
-	got3 := h.emailFields
-	want3 := []int{2}
+	got3 := h.fieldsEmail
+	want3 := map[string]bool{"Email": true}
 	if len(got3) != len(want3) {
 		t.Fatalf("Want %v, got %v", len(want3), len(got3))
 	}
@@ -136,36 +136,36 @@ func TestValidationFields(t *testing.T) {
 		}
 	}
 
-	got4 := h.valFields
-	want4 := [][3]int{{3, 18, 120}, {4, 5, 3580}, {5, 10, 50004}}
+	got4 := h.fieldsValue
+	want4 := map[string][2]int{"Age": [2]int{18, 120}, "Price": [2]int{5, 3580}, "CurrencyRate": [2]int{10, 50004}}
 	if len(got4) != len(want4) {
 		t.Fatalf("Want %v, got %v", len(want4), len(got4))
 	}
-	if len(got4[0]) != len(want4[0]) {
-		t.Fatalf("Want %v, got %v", len(want4), len(got4))
+	if len(got4["Age"]) != len(want4["Age"]) {
+		t.Fatalf("Want %v, got %v", len(want4["Age"]), len(got4["Age"]))
 	}
-	if len(got4[1]) != len(want4[1]) {
-		t.Fatalf("Want %v, got %v", len(want4), len(got4))
+	if len(got4["Price"]) != len(want4["Price"]) {
+		t.Fatalf("Want %v, got %v", len(want4["Price"]), len(got4["Price"]))
 	}
-	if len(got4[2]) != len(want4[2]) {
-		t.Fatalf("Want %v, got %v", len(want4), len(got4))
+	if len(got4["CurrencyRate"]) != len(want4["CurrencyRate"]) {
+		t.Fatalf("Want %v, got %v", len(want4["CurrencyRate"]), len(got4["CurrencyRate"]))
 	}
-	for i, _ := range got4 {
-		for j := 0; j < 3; j++ {
-			if got4[i][j] != want4[i][j] {
-				t.Fatalf("Want %v, got %v", want4[i][j], got4[i][j])
+	for k, _ := range got4 {
+		for j := 0; j < 2; j++ {
+			if got4[k][j] != want4[k][j] {
+				t.Fatalf("Want %v, got %v", want4[k][j], got4[k][j])
 			}
 		}
 	}
 
-	if h.regexpFields == nil {
-		t.Fatalf("Got empty regexpFields")
+	if h.fieldsRegExp == nil {
+		t.Fatalf("Got empty fieldsRegExp")
 	}
-	if h.regexpFields[6] == nil {
-		t.Fatalf("Missing entry in regexpFields")
+	if h.fieldsRegExp["PostCode"] == nil {
+		t.Fatalf("Missing entry in fieldsRegExp")
 	}
-	if h.regexpFields[6].String() != "^[0-9]{2}\\-[0-9]{3}$" {
-		t.Fatalf("Want ^[0-9]{2}\\-[0-9]{3}$, got %v", h.regexpFields[6].String())
+	if h.fieldsRegExp["PostCode"].String() != "^[0-9]{2}\\-[0-9]{3}$" {
+		t.Fatalf("Want ^[0-9]{2}\\-[0-9]{3}$, got %v", h.fieldsRegExp["PostCode"].String())
 	}
 	// TODO: Cover all the fields ending with Fields
 }

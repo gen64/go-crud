@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"runtime"
 )
 
 // Controller is the main component that gets and saves objects in the database
@@ -105,7 +106,7 @@ func (c Controller) SaveToDB(obj interface{}) *ControllerError {
 		return err
 	}
 
-	b, _, err2 := c.Validate(obj)
+	b, _, err2 := c.Validate(obj, nil)
 	if err2 != nil || !b {
 		return &ControllerError{
 			Op:  "Validate",
@@ -183,6 +184,48 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 	return nil
 }
 
+// GetFromDB runs a select query on the database with specified filters, order,
+// limit and offset and returns a list of objects
+func (c Controller) GetFromDB(newObjFunc func() interface{}, order map[string]string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
+	obj := newObjFunc()
+	h, err := c.getHelper(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	b, _, err1 := c.Validate(obj, filters)
+	if err1 != nil || !b {
+		return nil, &ControllerError{
+			Op:  "ValidateFilters",
+			Err: err1,
+		}
+	}
+
+	var v []interface{}
+	rows, err2 := c.dbConn.Query(h.GetQuerySelect(order, limit, offset, filters), c.GetFiltersInterfaces(filters)...)
+	if err2 != nil {
+		return nil, &ControllerError{
+			Op:  "DBQuery",
+			Err: err2,
+		}
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		newObj := newObjFunc()
+		err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(newObj)...)...)
+		if err3 != nil {
+			return nil, &ControllerError{
+				Op:  "DBQueryRowsScan",
+				Err: err3,
+			}
+		}
+		v = append(v, newObj)
+	}
+
+	return v, nil
+}
+
 // GetModelIDInterface returns an interface{} to ID field of an object
 func (c *Controller) GetModelIDInterface(obj interface{}) interface{} {
 	return reflect.ValueOf(obj).Elem().FieldByName("ID").Addr().Interface()
@@ -206,6 +249,18 @@ func (c Controller) GetModelFieldInterfaces(obj interface{}) []interface{} {
 		v = append(v, valueField.Addr().Interface())
 	}
 	return v
+}
+
+// GetFiltersInterfaces returns list of interfaces from filters map (used in
+// querying)
+func (c Controller) GetFiltersInterfaces(mf map[string]interface{}) []interface{} {
+	var xi []interface{}
+	if mf != nil && len(mf) > 0 {
+		for _, v := range mf {
+			xi = append(xi, v)
+		}
+	}
+	return xi
 }
 
 // ResetFields zeroes object's field values
@@ -235,6 +290,7 @@ func (c Controller) ResetFields(obj interface{}) {
 // attached to.
 func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
+		PrintMemUsage()
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
@@ -259,100 +315,137 @@ func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) fu
 
 // Validate checks object's fields. It returns result of validation as
 // a bool and list of fields with invalid value
-func (c Controller) Validate(obj interface{}) (bool, []int, error) {
-	xi := []int{}
+func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (bool, []string, error) {
+	failedFields := []string{}
 	b := true
 
 	h, err := c.getHelper(obj)
 	if err != nil {
-		return false, xi, err
+		return false, failedFields, err
 	}
 
 	val := reflect.ValueOf(obj).Elem()
-	for j := 0; j < len(h.reqFields); j++ {
-		valueField := val.Field(h.reqFields[j])
-		if valueField.Type().Name() == "string" && valueField.String() == "" {
-			xi = append(xi, h.reqFields[j])
-			b = false
-		}
-		if valueField.Type().Name() == "int" && valueField.Int() == 0 {
-			xi = append(xi, h.reqFields[j])
-			b = false
-		}
-		if valueField.Type().Name() == "int64" && valueField.Int() == 0 {
-			bf := true
-			// Check if field is not a link
-			for l := 0; l < len(h.linkFields); l++ {
-				if h.linkFields[l][0] == h.reqFields[j] {
-					valueLinkField := val.Field(h.linkFields[l][1])
-					// If linked field is nil or linked object ID is 0
-					if valueLinkField.IsNil() {
-						bf = false
-					} else {
-						linkedId := c.GetModelIDValue(reflect.Indirect(valueLinkField).Addr().Interface())
-						if linkedId == 0 {
-							bf = false
-						}
-					}
-					break
-				}
+
+	// TODO: Shorten below code
+	if filters == nil {
+		for k, _ := range h.fieldsRequired {
+			valueField := val.FieldByName(k)
+			if valueField.Type().Name() == "string" && valueField.String() == "" {
+				failedFields = append(failedFields, k)
+				b = false
 			}
-			if !bf {
-				xi = append(xi, h.reqFields[j])
+			if valueField.Type().Name() == "int" && valueField.Int() == 0 {
+				failedFields = append(failedFields, k)
+				b = false
+			}
+			if valueField.Type().Name() == "int64" && valueField.Int() == 0 {
+				failedFields = append(failedFields, k)
 				b = false
 			}
 		}
 	}
-	for j := 0; j < len(h.lenFields); j++ {
-		valueField := val.Field(h.lenFields[j][0])
+	for k, v := range h.fieldsLength {
+		if filters != nil && !c.isKeyInMap(k, filters) {
+			continue
+		}
+		var valueField reflect.Value
+		if filters != nil {
+			valueField = reflect.ValueOf(filters[k])
+			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
+				failedFields = append(failedFields, k)
+				b = false
+				continue
+			}
+		} else {
+			valueField = val.FieldByName(k)
+		}
 		if valueField.Type().Name() != "string" {
 			continue
 		}
-		if h.lenFields[j][1] > -1 && len(valueField.String()) < h.lenFields[j][1] {
-			xi = append(xi, h.lenFields[j][0])
+		if v[0] > -1 && len(valueField.String()) < v[0] {
+			failedFields = append(failedFields, k)
 			b = false
 		}
-		if h.lenFields[j][2] > -1 && len(valueField.String()) > h.lenFields[j][2] {
-			xi = append(xi, h.lenFields[j][0])
+		if v[1] > -1 && len(valueField.String()) > v[1] {
+			failedFields = append(failedFields, k)
 			b = false
 		}
 	}
-	for j := 0; j < len(h.valFields); j++ {
-		valueField := val.Field(h.valFields[j][0])
+	for k, v := range h.fieldsValue {
+		if filters != nil && !c.isKeyInMap(k, filters) {
+			continue
+		}
+		var valueField reflect.Value
+		if filters != nil {
+			valueField = reflect.ValueOf(filters[k])
+			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
+				failedFields = append(failedFields, k)
+				b = false
+				continue
+			}
+		} else {
+			valueField = val.FieldByName(k)
+		}
 		if valueField.Type().Name() != "int" && valueField.Type().Name() != "int64" {
 			continue
 		}
-		if h.valFields[j][1] > -1 && valueField.Int() < int64(h.valFields[j][1]) {
-			xi = append(xi, h.valFields[j][0])
+		if v[0] > -1 && valueField.Int() < int64(v[0]) {
+			failedFields = append(failedFields, k)
 			b = false
 		}
-		if h.valFields[j][2] > -1 && valueField.Int() > int64(h.valFields[j][2]) {
-			xi = append(xi, h.valFields[j][0])
+		if v[1] > -1 && valueField.Int() > int64(v[1]) {
+			failedFields = append(failedFields, k)
 			b = false
 		}
 	}
-	for j := 0; j < len(h.emailFields); j++ {
-		valueField := val.Field(h.emailFields[j])
+	for k, _ := range h.fieldsEmail {
+		if filters != nil && !c.isKeyInMap(k, filters) {
+			continue
+		}
+		var valueField reflect.Value
+		if filters != nil {
+			valueField = reflect.ValueOf(filters[k])
+			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
+				failedFields = append(failedFields, k)
+				b = false
+				continue
+			}
+		} else {
+			valueField = val.FieldByName(k)
+		}
 		if valueField.Type().Name() != "string" {
 			continue
 		}
 		var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
 		if !emailRegex.MatchString(valueField.String()) {
-			xi = append(xi, h.emailFields[j])
+			failedFields = append(failedFields, k)
 			b = false
 		}
 	}
-	for k, v := range h.regexpFields {
-		valueField := val.Field(k)
+	for k, v := range h.fieldsRegExp {
+		if filters != nil && !c.isKeyInMap(k, filters) {
+			continue
+		}
+		var valueField reflect.Value
+		if filters != nil {
+			valueField = reflect.ValueOf(filters[k])
+			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
+				failedFields = append(failedFields, k)
+				b = false
+				continue
+			}
+		} else {
+			valueField = val.FieldByName(k)
+		}
 		if valueField.Type().Name() != "string" {
 			continue
 		}
 		if !v.MatchString(valueField.String()) {
-			xi = append(xi, k)
+			failedFields = append(failedFields, k)
 			b = false
 		}
 	}
-	return b, xi, nil
+	return b, failedFields, nil
 }
 
 // getHelper returns a special Helper instance which reflects the struct type
@@ -408,7 +501,7 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 		return
 	}
 
-	b, _, err := c.Validate(objClone)
+	b, _, err := c.Validate(objClone, nil)
 	if !b || err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(fmt.Sprintf("{\"err\":\"validation failed: %s\"}", err)))
@@ -508,4 +601,26 @@ func (c Controller) jsonError(e string) []byte {
 
 func (c Controller) jsonID(id int64) []byte {
 	return []byte(fmt.Sprintf("{\"id\":\"%d\"}", id))
+}
+
+func (c Controller) isKeyInMap(k string, m map[string]interface{}) bool {
+	for _, key := range reflect.ValueOf(m).MapKeys() {
+		if key.String() == k {
+			return true
+		}
+	}
+	return false
+}
+
+func PrintMemUsage() {
+        var m runtime.MemStats
+        runtime.ReadMemStats(&m)
+        // For info on each, see: https://golang.org/pkg/runtime/#MemStats
+        fmt.Printf("Alloc = %v B", m.Alloc)
+        fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
+        fmt.Printf("\tSys = %v B", m.Sys)
+        fmt.Printf("\tNumGC = %v", m.NumGC)
+		fmt.Printf("\tMallocs = %v", m.Mallocs)
+		fmt.Printf("\tFrees = %v", m.Frees)
+		fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
 }

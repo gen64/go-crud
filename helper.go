@@ -1,7 +1,6 @@
 package crud
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -22,17 +21,20 @@ type Helper struct {
 	queryCreateTable string
 	queryInsert      string
 	queryUpdateById  string
+	querySelect      string
 	querySelectById  string
 	queryDeleteById  string
 	dbTbl            string
 	dbColPrefix      string
+	dbCols           map[string]string
 	url              string
-	reqFields        []int
-	lenFields        [][3]int
-	emailFields      []int
-	linkFields       [][2]int
-	valFields        [][3]int
-	regexpFields     map[int]*regexp.Regexp
+
+	fieldsRequired   map[string]bool
+	fieldsLength     map[string][2]int
+	fieldsEmail      map[string]bool
+	fieldsValue      map[string][2]int
+	fieldsRegExp     map[string]*regexp.Regexp
+
 	err              *HelperError
 }
 
@@ -79,28 +81,80 @@ func (h *Helper) GetQueryDeleteById() string {
 	return h.queryDeleteById
 }
 
-func (h *Helper) setFieldFromTag(s string, j int) string {
-	req, lenmin, lenmax, link, email, valmin, valmax, re, err := h.parseTag(s)
+func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, filters map[string]interface{}) string {
+	s := h.querySelect
+
+	qOrder := ""
+	if order != nil && len(order) > 0 {
+		for k, v := range order {
+			if h.dbCols[k] == "" {
+				continue
+			}
+
+			d := "ASC"
+			if v == strings.ToLower("desc") {
+				d = "DESC"
+			}
+			qOrder = h.addWithComma(qOrder, h.dbCols[k] + " " + d)
+		}
+	}
+
+	qLimitOffset := ""
+	if limit > 0 {
+		if offset > 0 {
+			qLimitOffset = fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+		} else {
+			qLimitOffset = fmt.Sprintf("LIMIT %d", limit)
+		}
+	}
+
+	qWhere := ""
+	i := 1
+	if filters != nil && len(filters) > 0 {
+		for k, _ := range filters {
+			if h.dbCols[k] == "" {
+				continue
+			}
+
+			qWhere = h.addWithAnd(qWhere, fmt.Sprintf(h.dbCols[k] + "=$%d", i))
+			i++
+		}
+	}
+
+	if qWhere != "" {
+		s += " WHERE " + qWhere
+	}
+	if qOrder != "" {
+		s += " ORDER BY " + qOrder
+	}
+	if qLimitOffset != "" {
+		s += " " + qLimitOffset
+	}
+
+	return s
+}
+
+func (h *Helper) setFieldFromTag(tag string, fieldIdx int, fieldName string) {
+	req, lenmin, lenmax, email, valmin, valmax, re, err := h.parseTag(tag)
 	if err != nil {
 		h.err = err
-		return ""
+		return
 	}
 	if req {
-		h.reqFields = append(h.reqFields, j)
+		h.fieldsRequired[fieldName] = true
 	}
 	if email {
-		h.emailFields = append(h.emailFields, j)
+		h.fieldsEmail[fieldName] = true
 	}
 	if lenmin > -1 || lenmax > -1 {
-		h.lenFields = append(h.lenFields, [3]int{j, lenmin, lenmax})
+		h.fieldsLength[fieldName] = [2]int{lenmin, lenmax}
 	}
 	if valmin > -1 || valmax > -1 {
-		h.valFields = append(h.valFields, [3]int{j, valmin, valmax})
+		h.fieldsValue[fieldName] = [2]int{valmin, valmax}
 	}
 	if re != "" {
-		h.regexpFields[j] = regexp.MustCompile(re)
+		h.fieldsRegExp[fieldName] = regexp.MustCompile(re)
 	}
-	return link
 }
 
 func (h *Helper) getDBCol(n string) string {
@@ -144,6 +198,14 @@ func (h *Helper) addWithComma(s string, v string) string {
 	return s
 }
 
+func (h *Helper) addWithAnd(s string, v string) string {
+	if s != "" {
+		s += " AND "
+	}
+	s += v
+	return s
+}
+
 func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
@@ -155,15 +217,16 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	h.dbColPrefix = usName
 	h.url = usPluName
 
-	h.reqFields = make([]int, 0)
-	h.lenFields = make([][3]int, 0)
-	h.linkFields = make([][2]int, 0)
-	h.valFields = make([][3]int, 0)
+	h.dbCols = make(map[string]string)
+
+	h.fieldsRequired = make(map[string]bool)
+	h.fieldsLength = make(map[string][2]int)
+	h.fieldsValue = make(map[string][2]int)
+	h.fieldsEmail = make(map[string]bool)
+	h.fieldsRegExp = make(map[string]*regexp.Regexp)
 
 	var queryCreateTableCols, querySelectCols, queryUpdateCols, queryInsertCols, queryInsertVals string
 	var updateFieldCnt, insertFieldCnt int
-
-	h.regexpFields = make(map[int]*regexp.Regexp, 0)
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
@@ -171,25 +234,13 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 			continue
 		}
 
-		link := h.setFieldFromTag(field.Tag.Get("crud"), j)
+		h.setFieldFromTag(field.Tag.Get("crud"), j, field.Name)
 		if h.err != nil {
 			return
 		}
 
-		if link != "" {
-			linkedField, linkedFound := s.FieldByName(link)
-			if !linkedFound {
-				h.err = &HelperError{
-					Op:  "Link",
-					Tag: link,
-					Err: errors.New("invalid link value"),
-				}
-				return
-			}
-			h.linkFields = append(h.linkFields, [2]int{j, linkedField.Index[0]})
-		}
-
 		dbCol := h.getDBCol(field.Name)
+		h.dbCols[field.Name] = dbCol
 		dbColParams := h.getDBColParams(field.Name, field.Type.String())
 
 		queryCreateTableCols = h.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)
@@ -210,6 +261,7 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	h.querySelectById = "SELECT " + querySelectCols + " FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
 	h.queryInsert = "INSERT INTO " + h.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + h.dbColPrefix + "_id"
 	h.queryUpdateById = "UPDATE " + h.dbTbl + " SET " + queryUpdateCols + " WHERE " + h.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt+1)
+	h.querySelect = "SELECT " + querySelectCols + " FROM " + h.dbTbl
 }
 
 func (h *Helper) getUnderscoredName(s string) string {
@@ -246,7 +298,7 @@ func (h *Helper) getPluralName(s string) string {
 	return s + "s"
 }
 
-func (h *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, string, *HelperError) {
+func (h *Helper) parseTag(s string) (bool, int, int, bool, int, int, string, *HelperError) {
 	xt := strings.SplitN(s, " ", -1)
 	xb := map[string]bool{
 		"req":   false,
@@ -260,12 +312,11 @@ func (h *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, str
 	}
 	xs := map[string]string{
 		"regexp": "",
-		"link":   "",
 	}
 	var helperError *HelperError
 
 	if len(xt) < 1 {
-		return xb["req"], xi["lenmin"], xi["lenmax"], xs["link"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
+		return xb["req"], xi["lenmin"], xi["lenmax"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
 	}
 
 	for _, t := range xt {
@@ -285,23 +336,6 @@ func (h *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, str
 				lStr := strings.Replace(t, sl+":", "", 1)
 				if sl == "regexp" {
 					xs["regexp"] = lStr
-				} else if sl == "link" {
-					matched, err := regexp.Match(`^[a-zA-Z0-9]+$`, []byte(lStr))
-					if err != nil {
-						helperError = &HelperError{
-							Op:  "ParseTag",
-							Tag: "link",
-							Err: fmt.Errorf("regexp.Match failed: %w", err),
-						}
-					}
-					if !matched {
-						helperError = &HelperError{
-							Op:  "ParseTag",
-							Tag: "link",
-							Err: errors.New("not int and gt 0"),
-						}
-					}
-					xs["link"] = lStr
 				} else {
 					i, err := strconv.Atoi(lStr)
 					if err != nil {
@@ -319,5 +353,5 @@ func (h *Helper) parseTag(s string) (bool, int, int, string, bool, int, int, str
 		}
 	}
 
-	return xb["req"], xi["lenmin"], xi["lenmax"], xs["link"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
+	return xb["req"], xi["lenmin"], xi["lenmax"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
 }

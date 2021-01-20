@@ -38,6 +38,7 @@ var resource *dockertest.Resource
 var mc *Controller
 var globalId int64
 var cancelHTTPCtx context.CancelFunc
+var newObjFunc func() interface{}
 
 func TestGetModelIDInterface(t *testing.T) {
 	ts1 := &TestStruct1{}
@@ -127,6 +128,22 @@ func TestDeleteFromDB(t *testing.T) {
 		t.Fatalf("DeleteFromDB failed to set ID to 0 on the struct")
 	}
 	globalId = 0
+}
+
+func TestGetFromDB(t *testing.T) {
+	ts1 := &TestStruct1{Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112"}
+	for i := 0; i<50; i++ {
+		ts1.ID = 0
+		ts1.Age = 30+i
+		mc.SaveToDB(ts1)
+	}
+	xts1, _ := mc.GetFromDB(newObjFunc, map[string]string{"Age": "asc", "Price": "asc"}, 10, 20, map[string]interface{}{ "Price": 1000, "Email": "test@example.com" })
+	if len(xts1) != 10 {
+		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 10, len(xts1))
+	}
+	if xts1[2].(*TestStruct1).Age != 52 {
+		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 52, xts1[2].(*TestStruct1).Age)
+	}
 }
 
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
@@ -262,6 +279,11 @@ func createController() {
 	if mc == nil {
 		mc = NewController(db, "f0x_")
 	}
+	if newObjFunc == nil {
+		newObjFunc = func() interface{}{
+			return &TestStruct1{}
+		}
+	}
 }
 
 func getTableName(tblName string) (string, error) {
@@ -278,7 +300,7 @@ func getRow() (int64, int64, string, int, int, int, string, error) {
 	var price int
 	var currencyRate int
 	var postCode string
-	err := db.QueryRow("SELECT * FROM f0x_test_struct1s LIMIT 1").Scan(&id, &flags, &email, &age, &price, &currencyRate, &postCode)
+	err := db.QueryRow("SELECT * FROM f0x_test_struct1s ORDER BY test_struct1_id DESC LIMIT 1").Scan(&id, &flags, &email, &age, &price, &currencyRate, &postCode)
 	return id, flags, email, age, price, currencyRate, postCode, err
 }
 
