@@ -12,7 +12,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"runtime"
 )
 
 // Controller is the main component that gets and saves objects in the database
@@ -290,7 +289,6 @@ func (c Controller) ResetFields(obj interface{}) {
 // attached to.
 func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		PrintMemUsage()
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
@@ -610,17 +608,4 @@ func (c Controller) isKeyInMap(k string, m map[string]interface{}) bool {
 		}
 	}
 	return false
-}
-
-func PrintMemUsage() {
-        var m runtime.MemStats
-        runtime.ReadMemStats(&m)
-        // For info on each, see: https://golang.org/pkg/runtime/#MemStats
-        fmt.Printf("Alloc = %v B", m.Alloc)
-        fmt.Printf("\tTotalAlloc = %v B", m.TotalAlloc)
-        fmt.Printf("\tSys = %v B", m.Sys)
-        fmt.Printf("\tNumGC = %v", m.NumGC)
-		fmt.Printf("\tMallocs = %v", m.Mallocs)
-		fmt.Printf("\tFrees = %v", m.Frees)
-		fmt.Printf("\tHeapObjects = %v\n", m.HeapObjects)
 }
