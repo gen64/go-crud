@@ -26,16 +26,17 @@ type Helper struct {
 	queryDeleteById  string
 	dbTbl            string
 	dbColPrefix      string
+	dbFieldCols      map[string]string
 	dbCols           map[string]string
 	url              string
 
-	fieldsRequired   map[string]bool
-	fieldsLength     map[string][2]int
-	fieldsEmail      map[string]bool
-	fieldsValue      map[string][2]int
-	fieldsRegExp     map[string]*regexp.Regexp
+	fieldsRequired map[string]bool
+	fieldsLength   map[string][2]int
+	fieldsEmail    map[string]bool
+	fieldsValue    map[string][2]int
+	fieldsRegExp   map[string]*regexp.Regexp
 
-	err              *HelperError
+	err *HelperError
 }
 
 // NewHelper takes object and database table name prefix as arguments and
@@ -87,7 +88,7 @@ func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, 
 	qOrder := ""
 	if order != nil && len(order) > 0 {
 		for k, v := range order {
-			if h.dbCols[k] == "" {
+			if h.dbFieldCols[k] == "" && h.dbCols[k] == "" {
 				continue
 			}
 
@@ -95,7 +96,11 @@ func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, 
 			if v == strings.ToLower("desc") {
 				d = "DESC"
 			}
-			qOrder = h.addWithComma(qOrder, h.dbCols[k] + " " + d)
+			if h.dbFieldCols[k] != "" {
+				qOrder = h.addWithComma(qOrder, h.dbFieldCols[k]+" "+d)
+			} else {
+				qOrder = h.addWithComma(qOrder, k+" "+d)
+			}
 		}
 	}
 
@@ -112,11 +117,11 @@ func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, 
 	i := 1
 	if filters != nil && len(filters) > 0 {
 		for k, _ := range filters {
-			if h.dbCols[k] == "" {
+			if h.dbFieldCols[k] == "" {
 				continue
 			}
 
-			qWhere = h.addWithAnd(qWhere, fmt.Sprintf(h.dbCols[k] + "=$%d", i))
+			qWhere = h.addWithAnd(qWhere, fmt.Sprintf(h.dbFieldCols[k]+"=$%d", i))
 			i++
 		}
 	}
@@ -130,7 +135,6 @@ func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, 
 	if qLimitOffset != "" {
 		s += " " + qLimitOffset
 	}
-
 	return s
 }
 
@@ -217,6 +221,7 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	h.dbColPrefix = usName
 	h.url = usPluName
 
+	h.dbFieldCols = make(map[string]string)
 	h.dbCols = make(map[string]string)
 
 	h.fieldsRequired = make(map[string]bool)
@@ -240,7 +245,8 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 		}
 
 		dbCol := h.getDBCol(field.Name)
-		h.dbCols[field.Name] = dbCol
+		h.dbFieldCols[field.Name] = dbCol
+		h.dbCols[dbCol] = field.Name
 		dbColParams := h.getDBColParams(field.Name, field.Type.String())
 
 		queryCreateTableCols = h.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)

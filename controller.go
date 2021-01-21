@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
-	_ "log"
 	"net/http"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -508,7 +507,6 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 
 	err2 := c.SaveToDB(objClone)
 	if err2 != nil {
-		log.Print(err2)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -520,8 +518,63 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 
 func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(c.jsonError("id missing"))
+		obj := newObjFunc()
+		params := c.getParamsFromURI(r.RequestURI)
+
+		limit, _ := strconv.Atoi(params["limit"])
+		offset, _ := strconv.Atoi(params["offset"])
+		if limit < 1 {
+			limit = 10
+		}
+		if offset < 0 {
+			offset = 0
+		}
+
+		order := make(map[string]string)
+		if params["order"] != "" {
+			order[params["order"]] = params["order_direction"]
+		}
+
+		filters := make(map[string]interface{})
+		for k, v := range params {
+			if strings.HasPrefix(k, "filter_") {
+				k = k[7:]
+				fieldName, fieldValue, errF := c.uriFilterToFilter(obj, k, v)
+				if errF != nil {
+					if errF.Op == "GetHelper" {
+						w.WriteHeader(http.StatusInternalServerError)
+						return
+					} else {
+						w.WriteHeader(http.StatusBadRequest)
+						return
+					}
+				}
+				if fieldName != "" {
+					filters[fieldName] = fieldValue
+				}
+			}
+		}
+
+		xobj, err1 := c.GetFromDB(newObjFunc, order, limit, offset, filters)
+		if err1 != nil {
+			if err1.Op == "ValidateFilters" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			} else {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+		u := make(map[string]interface{})
+		u["items"] = xobj
+		j, err2 := json.Marshal(u)
+		if err2 != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write(j)
 		return
 	}
 
@@ -582,15 +635,36 @@ func (c Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, boo
 	xs := strings.SplitN(uri, "?", 2)
 	if xs[0] == "" {
 		return "", true
-	} else {
-		matched, err := regexp.Match(`^[0-9]+$`, []byte(xs[0]))
-		if err != nil || !matched {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write(c.jsonError("invalid id"))
-			return "", false
-		}
-		return xs[0], true
 	}
+	matched, err := regexp.Match(`^[0-9]+$`, []byte(xs[0]))
+	if err != nil || !matched {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write(c.jsonError("invalid id"))
+		return "", false
+	}
+	return xs[0], true
+}
+
+func (c Controller) getParamsFromURI(uri string) map[string]string {
+	o := make(map[string]string)
+	xs := strings.SplitN(uri, "?", 2)
+	if len(xs) < 2 || xs[1] == "" {
+		return o
+	}
+	xp := strings.SplitN(xs[1], "&", -1)
+	for _, p := range xp {
+		pv := strings.SplitN(p, "=", 2)
+		matched, err := regexp.Match(`^[0-9a-zA-Z_]+$`, []byte(pv[0]))
+		if len(pv) == 1 || err != nil || !matched {
+			continue
+		}
+		unesc, err := url.QueryUnescape(pv[1])
+		if err != nil {
+			continue
+		}
+		o[pv[0]] = unesc
+	}
+	return o
 }
 
 func (c Controller) jsonError(e string) []byte {
@@ -608,4 +682,46 @@ func (c Controller) isKeyInMap(k string, m map[string]interface{}) bool {
 		}
 	}
 	return false
+}
+
+func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filterValue string) (string, interface{}, *ControllerError) {
+	h, err := c.getHelper(obj)
+	if err != nil {
+		return "", nil, &ControllerError{
+			Op:  "GetHelper",
+			Err: err,
+		}
+	}
+
+	if h.dbCols[filterName] == "" {
+		return "", nil, nil
+	}
+
+	val := reflect.ValueOf(obj).Elem()
+	valueField := val.FieldByName(h.dbCols[filterName])
+	if valueField.Type().Name() == "int" {
+		filterInt, err := strconv.Atoi(filterValue)
+		if err != nil {
+			return "", nil, &ControllerError{
+				Op:  "InvalidValue",
+				Err: err,
+			}
+		}
+		return h.dbCols[filterName], filterInt, nil
+	}
+	if valueField.Type().Name() == "int64" {
+		filterInt64, err := strconv.ParseInt(filterValue, 10, 64)
+		if err != nil {
+			return "", nil, &ControllerError{
+				Op:  "InvalidValue",
+				Err: err,
+			}
+		}
+		return h.dbCols[filterName], filterInt64, nil
+	}
+	if valueField.Type().Name() == "string" {
+		return h.dbCols[filterName], filterValue, nil
+	}
+
+	return "", nil, nil
 }

@@ -132,12 +132,12 @@ func TestDeleteFromDB(t *testing.T) {
 
 func TestGetFromDB(t *testing.T) {
 	ts1 := &TestStruct1{Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112"}
-	for i := 0; i<50; i++ {
+	for i := 0; i < 50; i++ {
 		ts1.ID = 0
-		ts1.Age = 30+i
+		ts1.Age = 30 + i
 		mc.SaveToDB(ts1)
 	}
-	xts1, _ := mc.GetFromDB(newObjFunc, map[string]string{"Age": "asc", "Price": "asc"}, 10, 20, map[string]interface{}{ "Price": 1000, "Email": "test@example.com" })
+	xts1, _ := mc.GetFromDB(newObjFunc, map[string]string{"Age": "asc", "Price": "asc"}, 10, 20, map[string]interface{}{"Price": 1000, "Email": "test@example.com"})
 	if len(xts1) != 10 {
 		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 10, len(xts1))
 	}
@@ -230,6 +230,9 @@ func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
 	cancelHTTPCtx()
 }
 
+func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
+}
+
 func TestDropDBTables(t *testing.T) {
 	ts1 := &TestStruct1{}
 	_ = mc.DropDBTables(ts1)
@@ -280,7 +283,7 @@ func createController() {
 		mc = NewController(db, "f0x_")
 	}
 	if newObjFunc == nil {
-		newObjFunc = func() interface{}{
+		newObjFunc = func() interface{} {
 			return &TestStruct1{}
 		}
 	}
