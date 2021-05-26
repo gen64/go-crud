@@ -8,7 +8,7 @@ Package CRUD is meant to make two things: map structs to PostgreSQL tables
 
 ## Example usage
 ### Structs (models)
-For example, you can define structs (later called models) as follows (note the tags):
+Models are defined with structs as follows (take a closer look at the tags):
 
 ```
 type User struct {
@@ -98,11 +98,16 @@ as:
 
 
 ### Database storage
+Currently, `go-crud` supports only PostgreSQL as a storage for objects. 
+
+#### Controller
+To perform model database actions, a `Controller` object must be created. See below example
+
 Here is an example, creating table based on struct, adding record, updating
 it and deleting.
 
 ```
-conn, _ := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost,Port, dbUser, dbPass, dbName))
+conn, _ := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass, dbName))
 defer conn.Close()
 
 c := crud.NewController(conn, "app1_")
