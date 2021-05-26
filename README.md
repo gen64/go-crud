@@ -14,6 +14,7 @@ Models are defined with structs as follows (take a closer look at the tags):
 type User struct {
 	ID                 int    `json:"user_id" http_endpoint:"noread noupdate nocreate nodelete nolist"`
 	Flags              int    `json:"flags"`
+	Name               string `json:"name" crud:"req lenmin:2 lenmax:50"`
 	Email              string `json:"email" crud:"req"`
 	Password           string `json:"password" crud:"" http:"noread noupdate nocreate nolist"`
 	EmailActivationKey string `json:"email_activation_key" crud:""`
@@ -101,50 +102,61 @@ as:
 Currently, `go-crud` supports only PostgreSQL as a storage for objects. 
 
 #### Controller
-To perform model database actions, a `Controller` object must be created. See below example
-
-Here is an example, creating table based on struct, adding record, updating
-it and deleting.
+To perform model database actions, a `Controller` object must be created. See
+below example that modify object(s) in the database.
 
 ```
+// Create connection with sql
 conn, _ := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", dbHost, dbPort, dbUser, dbPass, dbName))
 defer conn.Close()
 
+// Create CRUD controller and an instance of a struct
 c := crud.NewController(conn, "app1_")
 user := &User{}
-err = c.CreateDBTable(user) // runs CREATE TABLE
+
+err = c.CreateDBTable(user) // Run 'CREATE TABLE'
 
 user.Email = "test@example.com"
 user.Name = "Nicholas"
 user.CreatedAt = time.Now().Unix()
-err = c.SaveToDB(user) // runs INSERT
+err = c.SaveToDB(user) // Insert object to database table
 
 user.Email = "newemail@example.com"
-err = c.SaveToDB() // runs UPDATE
+err = c.SaveToDB() // Update object in the database table
 
-err = c.DeleteFromDB() // runs DELETE
+err = c.DeleteFromDB() // Delete object from the database table
 
-err = c.DropDBTable(user) // runs DROP TABLE
+err = c.DropDBTable(user) // Run 'DROP TABLE'
 ```
 
-### HTTP Handler
-Finally, here is an example of creating CRUD HTTP endpoint.
+### HTTP Endpoints
+With `go-crud`, HTTP endpoints can be created to manage objects stored in the
+database. See below example that returns HTTP Handler func which can be 
+attached to Golang's HTTP server.
 
 ```
-http.HandleFunc("/users/", c.GetHTTPHandler(user, "/users/"))
+http.HandleFunc("/users/", c.GetHTTPHandler(func() interface{} {
+	return &User{}
+}, "/users/"))
 log.Fatal(http.ListenAndServe(":9001", nil))
 ```
 
-With above, you can send a JSON payload using PUT method to `/users/`
-endpoint to create a new record.
-For already existing record, use `/users/:id` with PUT, GET or DELETE method to
-update, get or delete the record.
-Here is how JSON input would look like for previously shown User struct.
+In the example, `/users/` CRUDL endpoint is created and it allows to:
+* create new User by sending JSON payload using PUT method
+* update existing User by sending JSON payload to `/users/:id` with PUT method
+* get existing User details with making GET request to `/users/:id`
+* delete existing User with DELETE request to `/users/:id`
+* get list of Users with making GET request to `/users/` with optional query parameters such as `limit`, `offset` to slice the returned list and `filter_` params (eg. `filter_email`) to filter out records with by specific fields
 
+When creating or updating an object, JSON payload with object details is
+required, as on the example below:
 ```
 {
 	"email": "test@example.com",
-	"name": "James",
-	"created_at": "1610356241"
+	"name": "Nicholas",
+	"created_at": "1610356241",
+	...
 }
 ```
+
+Output from the endpoint is in JSON format as well.
