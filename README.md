@@ -62,24 +62,26 @@ Property | Explanation
 --- | ---
 `req` | Field is required
 `uniq` | Field has to be unique (like `UNIQUE` on the database column)
-`valmin` | If field is numeric, this is minimal value for the field. If it needs to be set to `0`, then additional `valminzero` property needs adding
-`valminzero` | In Go numeric field cannot be nil, therefore if `valmin` needs to be considered as `0`, this additional property must be added
+`valmin` | If field is numeric, this is minimal value for the field. If it needs to be set to `0`, then additional `valminzero` property must be added (in Go, numeric field cannot be nil)
+`valminzero` | Add this if `valmin` is to equal `0`
 `valmax` | If field is numeric, this is maximal value for the field
 `val` | Default value for the field. If the value is not a simple, short alphanumeric, use the `crud_val` tag for it
-`lenmin` | If field is string, this is a minimal length of the field value. In Go, numeric value cannot be nil, and if `lenmin` needs to be `0`, `lenminzero` must be added
-`lenminzero` | If field is string, and `lenminzero` is added then `lenmin` will be considered 0
+`lenmin` | If field is string, this is a minimal length of the field value. If it needs to be set to `0`, then additional `lenminzero` property must be added (in Go, numeric field cannot be nil)
+`lenminzero` | Add this if `lenmin` is to equal `0`
 `lenmax` | If field is string, this is a maximal length of the field value
 `testval` | Valid test value (used for tests)
 `testvalpattern` | Same as `crud_testvalpattern`
 
 
 ##### HTTP Field Properties
+Below properties configure field presence in model's HTTP endpoint.
+
 Property | Explanation
 --- | ---
-`noread` | Model's HTTP endpoint will not output the field when getting single object
-`noupdate` | Model's HTTP endpoint will not allow updating the field
-`nocreate` | Model's HTTP endpoint will not insert any data (will use default) when creating a new object
-`nolist` | Model's HTTP endpoint will not output the field when listing objects
+`noread` | Field will not be present in the output when getting single object
+`noupdate` | Field will not be updated (it will be ignored in the payload)
+`nocreate` | When creating a new object, field will have its default value (it will be ignored in the payload)
+`nolist` | Field will not be present in the output when getting any list of objects
 
 
 #### Model tags
