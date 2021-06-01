@@ -160,3 +160,28 @@ required, as on the example below:
 ```
 
 Output from the endpoint is in JSON format as well.
+
+#### Custom HTTP Endpoints
+It's possible to create custom CRUD endpoints that will operate only on 
+specific model fields. For example, you might create endpoint that lists Users
+but shows only it's ID and Name, or an endpoint that updates only User
+password. Check below code.
+```
+// List users
+http.HandleFunc("/users/list_emails/", c.GetCustomHTTPHandler(func() interface{} {
+	return &User{}
+}, "/users/shortlist/", crud.OpList, ["Email"]))
+
+// Allow to update only the Password field
+http.HandleFunc("/users/update_password/", c.GetCustomHTTPHandler(func() interface{} {
+	return &User{}
+}, "/users/password/", crud.OpUpdate, ["Password"]))
+
+// Allow to create new User (only with Email and Name fields), and to read one
+// element via /users/create_and_read/:id - which will return Email and Name only
+http.HandleFunc("/users/create_and_read/", c.GetCustomHTTPHandler(func() interface{} {
+	return &User{}
+}, "/users/create/", crud.OpCreate | crud.OpRead, ["Email", "Name"]) 
+```
+
+Delete is unavailable with custom HTTP endpoints.
