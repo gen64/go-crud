@@ -25,7 +25,7 @@ type User struct {
 type Session struct {
 	ID                 int    `json:"session_id"`
 	Flags              int    `json:"flags"`
-	Key                string `json:"key" crud:"uniq lenmin:32 lenmax:50 genSetBy genUpdateBy"`
+	Key                string `json:"key" crud:"uniq lenmin:32 lenmax:50"`
 	ExpiresAt          int    `json:"expires_at"`
 	UserID             int    `json:"user_id" crud:"req"`
 }
@@ -37,7 +37,7 @@ type Something struct {
 	Age                int    `json:"age" crud:"req valmin:18 valmax:130 val:18"`
 	Price              int    `json:"price" crud:"req valmin:0 valminzero valmax:9900 val:100"`
 	CurrencyRate       int    `json:"currency_rate" crud:"req valmin:40000 valmax:61234 val:10000"`
-	PostCode           string `json:"post_code" crud:"req val:32-600 testval:32-600 testvalpattern:DD-DDD" crud_regexp:"^[0-9]{2}\\-[0-9]{3}$"`
+	PostCode           string `json:"post_code" crud:"req val:32-600`
 }
 ```
 
@@ -70,8 +70,6 @@ Property | Explanation
 `lenmin` | If field is string, this is a minimal length of the field value. If it needs to be set to `0`, then additional `lenminzero` property must be added (in Go, numeric field cannot be nil)
 `lenminzero` | Add this if `lenmin` is to equal `0`
 `lenmax` | If field is string, this is a maximal length of the field value
-`testval` | Valid test value (used for tests)
-`testvalpattern` | Same as `crud_testvalpattern`
 
 
 ##### HTTP Field Properties
@@ -185,3 +183,7 @@ http.HandleFunc("/users/create_and_read/", c.GetCustomHTTPHandler(func() interfa
 ```
 
 Delete is unavailable with custom HTTP endpoints.
+
+## Refactoring Plan
+* comment out all the controller tests first, we'll focus on the helper first
+* go through helper

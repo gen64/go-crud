@@ -1,6 +1,6 @@
 package crud
 
-import (
+/*import (
 	"bytes"
 	"context"
 	"database/sql"
@@ -13,23 +13,14 @@ import (
 	"net/http"
 	"testing"
 	"time"
-)
+)*/
 
-type TestStruct1 struct {
-	ID           int64  `json:"teststruct1_id"`
-	Flags        int64  `json:"teststruct1_flags"`
-	Email        string `json:"email" crud:"req lenmin:10 lenmax:255 email"`
-	Age          int    `json:"age" crud:"req valmin:18 valmax:120"`
-	Price        int    `json:"price" crud:"req valmin:5 valmax:3580"`
-	CurrencyRate int    `json:"currency_rate" crud:"req valmin:10 valmax:50004"`
-	PostCode     string `json:"post_code" crud:"req lenmin:6 regexp:^[0-9]{2}\\-[0-9]{3}$"`
-}
-
-const dbUser = "testing"
+/*
+const dbUser = "gocrudtest"
 const dbPass = "secret"
-const dbName = "testing"
+const dbName = "gocrud"
 
-const httpURI = "test_struct1s"
+const httpURI = "/v1/testobjects/"
 const httpPort = "32777"
 
 var db *sql.DB
@@ -245,48 +236,9 @@ func TestDropDBTables(t *testing.T) {
 	removeDocker()
 }
 
-func createDocker() {
-	var err error
-	if pool == nil {
-		pool, err = dockertest.NewPool("")
-		if err != nil {
-			log.Fatalf("Could not connect to docker: %s", err)
-		}
-	}
-	if resource == nil {
-		resource, err = pool.Run("postgres", "13", []string{"POSTGRES_PASSWORD=" + dbPass, "POSTGRES_USER=" + dbUser, "POSTGRES_DB=" + dbName})
-		if err != nil {
-			log.Fatalf("Could not start resource: %s", err)
-		}
-	}
-
-	if db == nil {
-		if err = pool.Retry(func() error {
-			var err error
-			db, err = sql.Open("postgres", fmt.Sprintf("host=localhost user=%s password=%s port=%s dbname=%s sslmode=disable", dbUser, dbPass, resource.GetPort("5432/tcp"), dbName))
-			if err != nil {
-				return err
-			}
-			return db.Ping()
-		}); err != nil {
-			log.Fatalf("Could not connect to docker: %s", err)
-		}
-	}
-}
 
 func removeDocker() {
 	_ = pool.Purge(resource)
-}
-
-func createController() {
-	if mc == nil {
-		mc = NewController(db, "f0x_")
-	}
-	if newObjFunc == nil {
-		newObjFunc = func() interface{} {
-			return &TestStruct1{}
-		}
-	}
 }
 
 func getTableName(tblName string) (string, error) {
@@ -316,22 +268,6 @@ func getRowById(id int64) (int64, string, int, int, int, string, error) {
 	var postCode string
 	err := db.QueryRow("SELECT test_struct1_flags, email, age, price, currency_rate, post_code FROM f0x_test_struct1s WHERE test_struct1_id = $1", int64(id)).Scan(&flags, &email, &age, &price, &currencyRate, &postCode)
 	return flags, email, age, price, currencyRate, postCode, err
-}
-
-func createHTTPServer() {
-	if cancelHTTPCtx == nil {
-		var ctx context.Context
-		ctx, cancelHTTPCtx = context.WithCancel(context.Background())
-		go func(ctx context.Context) {
-			go func() {
-				http.HandleFunc("/"+httpURI+"/", mc.GetHTTPHandler(func() interface{} {
-					return &TestStruct1{}
-				}, "/"+httpURI+"/"))
-				http.ListenAndServe(":"+httpPort, nil)
-			}()
-		}(ctx)
-		time.Sleep(2 * time.Second)
-	}
 }
 
 func makePUTInsertRequest(j string, t *testing.T) {
@@ -391,3 +327,4 @@ func makeGETRequest(t *testing.T) *http.Response {
 	}
 	return resp
 }
+*/

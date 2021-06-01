@@ -4,18 +4,6 @@ import (
 	"testing"
 )
 
-type TestStruct struct {
-	ID           int64  `json:"teststruct_id"`
-	Flags        int64  `json:"teststruct_flags"`
-	Email        string `json:"email" crud:"req lenmin:10 lenmax:255 email"`
-	Age          int    `json:"age" crud:"req valmin:18 valmax:120"`
-	Price        int    `json:"price" crud:"req valmin:5 valmax:3580"`
-	CurrencyRate int    `json:"currency_rate" crud:"req valmin:10 valmax:50004"`
-	PostCode     string `json:"post_code" crud:"req lenmin:6 regexp:^[0-9]{2}\\-[0-9]{3}$"`
-}
-
-var ts = &TestStruct{}
-
 func TestSQLQueries(t *testing.T) {
 	h := NewHelper(ts, "")
 
