@@ -65,7 +65,9 @@ func TestMain(m *testing.M) {
 	createDocker()
 	createController()
 	createHTTPServer()
-	os.Exit(m.Run())
+	code := m.Run()
+	removeDocker()
+	os.Exit(code)
 }
 
 func createDocker() {
@@ -108,4 +110,8 @@ func createHTTPServer() {
 		}()
 	}(ctx)
 	time.Sleep(2 * time.Second)
+}
+
+func removeDocker() {
+	dockerPool.Purge(dockerResource)
 }
