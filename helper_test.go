@@ -1,9 +1,6 @@
 package crud
 
-import (
-	"testing"
-)
-
+/*
 func TestSQLQueries(t *testing.T) {
 	h := NewHelper(ts, "")
 
@@ -157,3 +154,4 @@ func TestValidationFields(t *testing.T) {
 	}
 	// TODO: Cover all the fields ending with Fields
 }
+*/
