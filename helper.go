@@ -63,18 +63,48 @@ func (h Helper) GetQueryCreateTable() string {
 }
 
 // GetQueryInsert returns insert query
-func (h *Helper) GetQueryInsert() string {
-	return h.queryInsert
+func (h *Helper) GetQueryInsert(fields []string) string {
+	if len(fields) == 0 {
+		return h.queryInsert
+	}
+
+	s := "INSERT INTO " + h.dbTbl + "("
+	qCols, _, qVals, _ := h.getColsCommaSeparated(fields)
+	if qCols == "" {
+		return h.queryInsert
+	}
+	s += qCols
+	s += ") VALUES (" + qVals + ") RETURNING " + h.dbColPrefix + "_id"
+	return s
 }
 
 // GetQueryUpdateById returns update query
-func (h *Helper) GetQueryUpdateById() string {
-	return h.queryUpdateById
+func (h *Helper) GetQueryUpdateById(fields []string) string {
+	if len(fields) == 0 {
+		return h.queryUpdateById
+	}
+
+	s := "UPDATE " + h.dbTbl + " SET "
+	qCols, cnt, _, qColVals := h.getColsCommaSeparated(fields)
+	if qCols == "" {
+		return h.queryUpdateById
+	}
+	s += qColVals + " WHERE " + h.dbColPrefix + "_id = $" + strconv.Itoa(cnt+1)
+	return s
 }
 
 // GetQuerySelectById returns select query
-func (h *Helper) GetQuerySelectById() string {
-	return h.querySelectById
+func (h *Helper) GetQuerySelectById(fields []string) string {
+	if len(fields) == 0 {
+		return h.querySelectById
+	}
+	s := "SELECT "
+	qCols, _, _, _ := h.getColsCommaSeparated(fields)
+	if qCols == "" {
+		return h.querySelectById
+	}
+	s += qCols + " FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
+	return s
 }
 
 // GetQueryDeleteById returns delete query
@@ -82,8 +112,17 @@ func (h *Helper) GetQueryDeleteById() string {
 	return h.queryDeleteById
 }
 
-func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, filters map[string]interface{}) string {
+func (h *Helper) GetQuerySelect(fields []string, order map[string]string, limit int, offset int, filters map[string]interface{}) string {
 	s := h.querySelect
+	if len(fields) > 0 {
+		s = "SELECT "
+		qCols, _, _, _ := h.getColsCommaSeparated(fields)
+		if qCols == "" {
+			s = h.querySelect
+		} else {
+			s += qCols + " FROM " + h.dbTbl
+		}
+	}
 
 	qOrder := ""
 	if order != nil && len(order) > 0 {
@@ -136,6 +175,23 @@ func (h *Helper) GetQuerySelect(order map[string]string, limit int, offset int, 
 		s += " " + qLimitOffset
 	}
 	return s
+}
+
+func (h *Helper) getColsCommaSeparated(fields []string) (string, int, string, string) {
+	c := ""
+	i := 0
+	v := ""
+	cv := ""
+	for _, k := range fields {
+		if h.dbFieldCols[k] == "" {
+			continue
+		}
+		c = h.addWithComma(c, h.dbFieldCols[k])
+		i++
+		v = h.addWithComma(v, "$"+strconv.Itoa(i))
+		cv = h.addWithComma(cv, h.dbFieldCols[k]+"=$"+strconv.Itoa(i))
+	}
+	return c, i, v, cv
 }
 
 func (h *Helper) setFieldFromTag(tag string, fieldIdx int, fieldName string) {

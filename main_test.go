@@ -34,12 +34,12 @@ var testStructObj *TestStruct
 
 // Test struct for all the tests
 type TestStruct struct {
-	ID    int64 `json:"teststruct1_id"`
-	Flags int64 `json:"flags"`
+	ID    int64 `json:"test_struct_id"`
+	Flags int64 `json:"test_struct_flags"`
 
 	// Test email validation
 	PrimaryEmail   string `json:"email" crud:"req"`
-	EmailSecondary string `json:"email3" crud:"req email"`
+	EmailSecondary string `json:"email2" crud:"req email"`
 
 	// Test length validation
 	FirstName string `json:"first_name" crud:"req lenmin:2 lenmax:30"`
@@ -65,6 +65,7 @@ func TestMain(m *testing.M) {
 	createDocker()
 	createController()
 	createHTTPServer()
+
 	code := m.Run()
 	removeDocker()
 	os.Exit(code)

@@ -114,9 +114,9 @@ func (c Controller) SaveToDB(obj interface{}) *ControllerError {
 
 	var err3 error
 	if c.GetModelIDValue(obj) != 0 {
-		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById(), append(c.GetModelFieldInterfaces(obj), c.GetModelIDInterface(obj))...)
+		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById([]string{}), append(c.GetModelFieldInterfaces(obj), c.GetModelIDInterface(obj))...)
 	} else {
-		err3 = c.dbConn.QueryRow(h.GetQueryInsert(), c.GetModelFieldInterfaces(obj)...).Scan(c.GetModelIDInterface(obj))
+		err3 = c.dbConn.QueryRow(h.GetQueryInsert([]string{}), c.GetModelFieldInterfaces(obj)...).Scan(c.GetModelIDInterface(obj))
 	}
 	if err3 != nil {
 		return &ControllerError{
@@ -144,7 +144,7 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 		return err2
 	}
 
-	err3 := c.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(obj)...)...)
+	err3 := c.dbConn.QueryRow(h.GetQuerySelectById([]string{}), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(obj)...)...)
 	switch {
 	case err3 == sql.ErrNoRows:
 		c.ResetFields(obj)
@@ -200,7 +200,7 @@ func (c Controller) GetFromDB(newObjFunc func() interface{}, order map[string]st
 	}
 
 	var v []interface{}
-	rows, err2 := c.dbConn.Query(h.GetQuerySelect(order, limit, offset, filters), c.GetFiltersInterfaces(filters)...)
+	rows, err2 := c.dbConn.Query(h.GetQuerySelect([]string{}, order, limit, offset, filters), c.GetFiltersInterfaces(filters)...)
 	if err2 != nil {
 		return nil, &ControllerError{
 			Op:  "DBQuery",

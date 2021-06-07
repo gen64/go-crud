@@ -16,21 +16,6 @@ package crud
 )*/
 
 /*
-const dbUser = "gocrudtest"
-const dbPass = "secret"
-const dbName = "gocrud"
-
-const httpURI = "/v1/testobjects/"
-const httpPort = "32777"
-
-var db *sql.DB
-var pool *dockertest.Pool
-var resource *dockertest.Resource
-var mc *Controller
-var globalId int64
-var cancelHTTPCtx context.CancelFunc
-var newObjFunc func() interface{}
-
 func TestGetModelIDInterface(t *testing.T) {
 	ts1 := &TestStruct1{}
 	ts1.ID = 123
