@@ -184,7 +184,7 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 
 // GetFromDB runs a select query on the database with specified filters, order,
 // limit and offset and returns a list of objects
-func (c Controller) GetFromDB(newObjFunc func() interface{}, order map[string]string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
+func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
 	obj := newObjFunc()
 	h, err := c.getHelper(obj)
 	if err != nil {
@@ -530,9 +530,10 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 			offset = 0
 		}
 
-		order := make(map[string]string)
+		order := []string{}
 		if params["order"] != "" {
-			order[params["order"]] = params["order_direction"]
+			order = append(order, params["orders"])
+			order = append(order, params["order_direction"])
 		}
 
 		filters := make(map[string]interface{})

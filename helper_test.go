@@ -21,8 +21,10 @@ func TestSQLQueries(t *testing.T) {
 }
 
 func TestSQLInsertQueries(t *testing.T) {
-	got = h.GetQueryInsert([]string{})
-	want = "INSERT INTO test_structs(test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING test_struct_id"
+	h := NewHelper(testStructObj, "")
+
+	got := h.GetQueryInsert([]string{})
+	want := "INSERT INTO test_structs(test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING test_struct_id"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
@@ -35,8 +37,10 @@ func TestSQLInsertQueries(t *testing.T) {
 }
 
 func TestSQLUpdateQueries(t *testing.T) {
-	got = h.GetQueryUpdateById([]string{})
-	want = "UPDATE test_structs SET test_struct_flags=$1,primary_email=$2,email_secondary=$3,first_name=$4,last_name=$5,age=$6,price=$7,post_code=$8,post_code2=$9,password=$10,created_by_user_id=$11,key=$12 WHERE test_struct_id = $13"
+	h := NewHelper(testStructObj, "")
+
+	got := h.GetQueryUpdateById([]string{})
+	want := "UPDATE test_structs SET test_struct_flags=$1,primary_email=$2,email_secondary=$3,first_name=$4,last_name=$5,age=$6,price=$7,post_code=$8,post_code2=$9,password=$10,created_by_user_id=$11,key=$12 WHERE test_struct_id = $13"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
@@ -49,16 +53,20 @@ func TestSQLUpdateQueries(t *testing.T) {
 }
 
 func TestSQLDeleteQueries(t *testing.T) {
-	got = h.GetQueryDeleteById()
-	want = "DELETE FROM test_structs WHERE test_struct_id = $1"
+	h := NewHelper(testStructObj, "")
+
+	got := h.GetQueryDeleteById()
+	want := "DELETE FROM test_structs WHERE test_struct_id = $1"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
 }
 
 func TestSQLSelectQueries(t *testing.T) {
-	got = h.GetQuerySelectById([]string{})
-	want = "SELECT test_struct_id,test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key FROM test_structs WHERE test_struct_id = $1"
+	h := NewHelper(testStructObj, "")
+
+	got := h.GetQuerySelectById([]string{})
+	want := "SELECT test_struct_id,test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key FROM test_structs WHERE test_struct_id = $1"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
@@ -81,13 +89,13 @@ func TestSQLSelectQueries(t *testing.T) {
 		t.Fatalf("want %v, got %v", want, got)
 	}
 
-	got = h.GetQuerySelect([]string{"Age"}, map[string]string{"EmailSecondary":"desc","Age":"asc"}, 67, 13, nil)
+	got = h.GetQuerySelect([]string{"Age"}, []string{"EmailSecondary", "desc", "Age", "asc"}, 67, 13, nil)
 	want = "SELECT age FROM test_structs ORDER BY email_secondary DESC,age ASC LIMIT 67 OFFSET 13"
 	if got != want {
 		t.Fatalf("want %v, got %v", want, got)
 	}
 
-	got = h.GetQuerySelect([]string{"Age"}, map[string]string{"EmailSecondary":"desc","Age":"asc"}, 67, 13, map[string]interface{}{"Price":4444,"PostCode2":"11-111"})
+	got = h.GetQuerySelect([]string{"Age"}, []string{"EmailSecondary", "desc", "Age", "asc"}, 67, 13, map[string]interface{}{"Price":4444,"PostCode2":"11-111"})
 	want = "SELECT age FROM test_structs WHERE price=$1 AND post_code2=$2 ORDER BY email_secondary DESC,age ASC LIMIT 67 OFFSET 13"
 	if got != want {
 		t.Fatalf("want %v, got %v", want, got)

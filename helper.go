@@ -112,7 +112,7 @@ func (h *Helper) GetQueryDeleteById() string {
 	return h.queryDeleteById
 }
 
-func (h *Helper) GetQuerySelect(fields []string, order map[string]string, limit int, offset int, filters map[string]interface{}) string {
+func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offset int, filters map[string]interface{}) string {
 	s := h.querySelect
 	if len(fields) > 0 {
 		s = "SELECT "
@@ -126,7 +126,10 @@ func (h *Helper) GetQuerySelect(fields []string, order map[string]string, limit 
 
 	qOrder := ""
 	if order != nil && len(order) > 0 {
-		for k, v := range order {
+		for i:=0; i<len(order); i=i+2 {
+			k := order[i]
+			v := order[i+1]
+
 			if h.dbFieldCols[k] == "" && h.dbCols[k] == "" {
 				continue
 			}
@@ -286,8 +289,10 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	h.fieldsEmail = make(map[string]bool)
 	h.fieldsRegExp = make(map[string]*regexp.Regexp)
 
-	var queryCreateTableCols, querySelectCols, queryUpdateCols, queryInsertCols, queryInsertVals string
-	var updateFieldCnt, insertFieldCnt int
+	colsWithTypes := []string{}
+	cols := []string{}
+	colsWithoutID := []string{}
+	idCol := h.dbColPrefix + "_id"
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
@@ -305,25 +310,128 @@ func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 		h.dbCols[dbCol] = field.Name
 		dbColParams := h.getDBColParams(field.Name, field.Type.String())
 
-		queryCreateTableCols = h.addWithComma(queryCreateTableCols, dbCol+" "+dbColParams)
-		querySelectCols = h.addWithComma(querySelectCols, dbCol)
-		if field.Name != "ID" {
-			updateFieldCnt++
-			queryUpdateCols = h.addWithComma(queryUpdateCols, dbCol+"=$"+strconv.Itoa(updateFieldCnt))
+		colsWithTypes = append(colsWithTypes, dbCol)
+		colsWithTypes = append(colsWithTypes, dbColParams)
+		cols = append(cols, dbCol)
 
-			insertFieldCnt++
-			queryInsertCols = h.addWithComma(queryInsertCols, dbCol)
-			queryInsertVals = h.addWithComma(queryInsertVals, "$"+strconv.Itoa(insertFieldCnt))
+		if field.Name != "ID" {
+			colsWithoutID = append(colsWithoutID, dbCol)
 		}
 	}
 
-	h.queryDropTable = "DROP TABLE IF EXISTS " + h.dbTbl
-	h.queryCreateTable = "CREATE TABLE " + h.dbTbl + " (" + queryCreateTableCols + ")"
-	h.queryDeleteById = "DELETE FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
-	h.querySelectById = "SELECT " + querySelectCols + " FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
-	h.queryInsert = "INSERT INTO " + h.dbTbl + "(" + queryInsertCols + ") VALUES (" + queryInsertVals + ") RETURNING " + h.dbColPrefix + "_id"
-	h.queryUpdateById = "UPDATE " + h.dbTbl + " SET " + queryUpdateCols + " WHERE " + h.dbColPrefix + "_id = $" + strconv.Itoa(updateFieldCnt+1)
-	h.querySelect = "SELECT " + querySelectCols + " FROM " + h.dbTbl
+	h.queryDropTable = h.buildQueryDropTable(h.dbTbl)
+	h.queryCreateTable = h.buildQueryCreateTable(h.dbTbl, colsWithTypes)
+	h.queryDeleteById = h.buildQueryDeleteById(h.dbTbl, idCol)
+	h.querySelectById = h.buildQuerySelectById(h.dbTbl, cols, idCol)
+	h.queryInsert = h.buildQueryInsert(h.dbTbl, colsWithoutID, idCol)
+	h.queryUpdateById = h.buildQueryUpdateById(h.dbTbl, colsWithoutID, idCol)
+	h.querySelect = h.buildQuerySelect(h.dbTbl, cols, []string{}, 0, 0, nil)
+}
+
+func (h *Helper) buildQueryDropTable(tbl string) string {
+	return fmt.Sprintf("DROP TABLE IF EXISTS %s", tbl)
+}
+
+func (h *Helper) buildQueryCreateTable(tbl string, cols []string) string {
+	c := ""
+	for i:=0; i<len(cols); i=i+2 {
+		c = h.addWithComma(c, cols[i] + " " + cols[i+1])
+	}
+	return fmt.Sprintf("CREATE TABLE %s (%s)", tbl, c)
+}
+
+func (h *Helper) buildQueryDeleteById(tbl string, idCol string) string {
+	return fmt.Sprintf("DELETE FROM %s WHERE %s = $1", tbl, idCol)
+}
+
+func (h *Helper) buildQuerySelectById(tbl string, cols []string, idCol string) string {
+	if len(cols) == 0 {
+		cols = append(cols, "*")
+	}
+	c := ""
+	for i:=0; i<len(cols); i++ {
+		c = h.addWithComma(c, cols[i])
+	}
+	return fmt.Sprintf("SELECT %s FROM %s WHERE %s = $1", c, tbl, idCol)
+}
+
+func (h *Helper) buildQueryInsert(tbl string, cols []string, idCol string) string {
+	if len(cols) == 0 {
+		return ""
+	}
+
+	c := ""
+	v := ""
+	for i:=0; i<len(cols); i++ {
+		c = h.addWithComma(c, cols[i])
+		v = h.addWithComma(v, "$"+strconv.Itoa(i+1))
+	}
+	return fmt.Sprintf("INSERT INTO %s(%s) VALUES (%s) RETURNING %s", tbl, c, v, idCol)
+}
+
+func (h *Helper) buildQueryUpdateById(tbl string, cols []string, idCol string) string {
+	if len(cols) == 0 {
+		return ""
+	}
+
+	c := ""
+	for i:=0; i<len(cols); i++ {
+		c = h.addWithComma(c, cols[i]+"=$"+strconv.Itoa(i+1))
+	}
+	return fmt.Sprintf("UPDATE %s SET %s WHERE %s = $%d", tbl, c, idCol, len(cols)+1)
+}
+
+func (h *Helper) buildQuerySelect(tbl string, cols []string, order []string, limit int, offset int, filters map[string]interface{}) string {
+	if len(cols) == 0 {
+		cols = append(cols, "*")
+	}
+	c := ""
+	for i:=0; i<len(cols); i++ {
+		c = h.addWithComma(c, cols[i])
+	}
+	q := fmt.Sprintf("SELECT %s FROM %s", c, tbl)
+
+	qOrder := ""
+	if len(order) > 0 {
+		for i:=0; i<len(order); i=i+2 {
+			k := order[i]
+			v := order[i+1]
+			d := "ASC"
+			if v == strings.ToLower("desc") {
+				d = "DESC"
+			}
+			qOrder = h.addWithComma(qOrder, k+" "+d)
+		}
+	}
+
+	qLimitOffset := ""
+	if limit > 0 {
+		if offset > 0 {
+			qLimitOffset = fmt.Sprintf("LIMIT %d OFFSET %d", limit, offset)
+		} else {
+			qLimitOffset = fmt.Sprintf("LIMIT %d", limit)
+		}
+	}
+
+	qWhere := ""
+	i := 1
+	if filters != nil && len(filters) > 0 {
+		for k, _ := range filters {
+			qWhere = h.addWithAnd(qWhere, fmt.Sprintf(k+"=$%d", i))
+			i++
+		}
+	}
+
+	if qWhere != "" {
+		q += " WHERE " + qWhere
+	}
+	if qOrder != "" {
+		q += " ORDER BY " + qOrder
+	}
+	if qLimitOffset != "" {
+		q += " " + qLimitOffset
+	}
+	return q
 }
 
 func (h *Helper) getUnderscoredName(s string) string {
