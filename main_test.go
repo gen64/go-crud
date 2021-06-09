@@ -43,11 +43,11 @@ type TestStruct struct {
 
 	// Test length validation
 	FirstName string `json:"first_name" crud:"req lenmin:2 lenmax:30"`
-	LastName  string `json:"last_name" crud:"req lenminzero lenmin:0 lenmax:255"`
+	LastName  string `json:"last_name" crud:"req lenmin:0 lenmax:255"`
 
 	// Test int value validation
-	Age   int `json:"age" crud:"req valmin:18 valmax:120"`
-	Price int `json:"price" crud:"valminzero valmin:0 valmax:999"`
+	Age   int `json:"age" crud:"req valmax:120"`
+	Price int `json:"price" crud:"valmin:0 valmax:999"`
 
 	// Test regular expression
 	PostCode  string `json:"post_code" crud:"req lenmin:6 regexp:^[0-9]{2}\\-[0-9]{3}$"`

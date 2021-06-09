@@ -4,38 +4,58 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
-	"time"
+	_ "os"
+	_ "time"
 	"github.com/gen64/go-crud"
 	"net/http"
+
+	"github.com/ory/dockertest/v3"
 
 	_ "github.com/lib/pq"
 )
 
+
+const dbUser = "testing"
+const dbPass = "secret"
+const dbName = "testing"
+
+const httpURI = "test_struct1s"
+const httpPort = "32777"
+
+var db *sql.DB
+var pool *dockertest.Pool
+var resource *dockertest.Resource
+
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Fprintf(os.Stderr, "Syntax: f0x <config.json>\n")
-		os.Exit(1)
+
+	var err error
+	if pool == nil {
+		pool, err = dockertest.NewPool("")
+		if err != nil {
+			log.Fatalf("Could not connect to docker: %s", err)
+		}
+	}
+	if resource == nil {
+		resource, err = pool.Run("postgres", "13", []string{"POSTGRES_PASSWORD=" + dbPass, "POSTGRES_USER=" + dbUser, "POSTGRES_DB=" + dbName})
+		if err != nil {
+			log.Fatalf("Could not start resource: %s", err)
+		}
 	}
 
-	cfg := NewConfig(os.Args[1])
-
-	conn, err := sql.Open("postgres", fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", cfg.DBHost, cfg.DBPort, cfg.DBUser, cfg.DBPass, cfg.DBName))
-	if err != nil {
-		panic(err)
-	}
-	conn.SetConnMaxLifetime(time.Minute * 3)
-	conn.SetMaxOpenConns(50)
-	conn.SetMaxIdleConns(30)
-
-	err = conn.Ping()
-	if err != nil {
-		panic(err)
+	if db == nil {
+		if err = pool.Retry(func() error {
+			var err error
+			db, err = sql.Open("postgres", fmt.Sprintf("host=localhost user=%s password=%s port=%s dbname=%s sslmode=disable", dbUser, dbPass, resource.GetPort("5432/tcp"), dbName))
+			if err != nil {
+				return err
+			}
+			return db.Ping()
+		}); err != nil {
+			log.Fatalf("Could not connect to docker: %s", err)
+		}
 	}
 
-	defer conn.Close()
-
-	mc := crud.NewController(conn, "f0x_")
+	mc := crud.NewController(db, "dupa_")
 
 	user := &User{}
 	session := &Session{}

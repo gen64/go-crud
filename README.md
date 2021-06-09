@@ -35,9 +35,9 @@ type Something struct {
 	Flags              int    `json:"flags"`
 	Email              string `json:"email" crud:"req"`
 	Age                int    `json:"age" crud:"req valmin:18 valmax:130 val:18"`
-	Price              int    `json:"price" crud:"req valmin:0 valminzero valmax:9900 val:100"`
+	Price              int    `json:"price" crud:"req valmin:0 valmax:9900 val:100"`
 	CurrencyRate       int    `json:"currency_rate" crud:"req valmin:40000 valmax:61234 val:10000"`
-	PostCode           string `json:"post_code" crud:"req val:32-600`
+	PostCode           string `json:"post_code" crud:"req val:32-600"`
 }
 ```
 
@@ -51,7 +51,7 @@ See below list of all the tags with examples.
 
 Tag | Example | Explanation
 --- | --- | ---
-`crud` | `crud:"req valmin:0 valminzero valmax:130 val:18"` | Struct field properties defining its valid value for model. See CRUD Field Properties for more info
+`crud` | `crud:"req valmin:0 valmax:130 val:18"` | Struct field properties defining its valid value for model. See CRUD Field Properties for more info
 `http` | `http:"noread noupdate nocreate nolist"` | Struct field configuration for model's HTTP endpoint. See HTTP Field Properties for more info
 `crud_val` | `crud_val:"Default value"` | Struct field default value
 `crud_regexp` | `crud_regexp:"^[0-9]{2}\\-[0-9]{3}$"` | Regular expression that struct field must match
@@ -63,12 +63,10 @@ Property | Explanation
 --- | ---
 `req` | Field is required
 `uniq` | Field has to be unique (like `UNIQUE` on the database column)
-`valmin` | If field is numeric, this is minimal value for the field. If it needs to be set to `0`, then additional `valminzero` property must be added (in Go, numeric field cannot be nil)
-`valminzero` | Add this if `valmin` is to equal `0`
+`valmin` | If field is numeric, this is minimal value for the field
 `valmax` | If field is numeric, this is maximal value for the field
 `val` | Default value for the field. If the value is not a simple, short alphanumeric, use the `crud_val` tag for it
-`lenmin` | If field is string, this is a minimal length of the field value. If it needs to be set to `0`, then additional `lenminzero` property must be added (in Go, numeric field cannot be nil)
-`lenminzero` | Add this if `lenmin` is to equal `0`
+`lenmin` | If field is string, this is a minimal length of the field value
 `lenmax` | If field is string, this is a maximal length of the field value
 
 

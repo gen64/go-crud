@@ -7,7 +7,7 @@ type User struct {
 	Password           string `json:"password" crud:"lenmax:255"`
 	EmailActivationKey string `json:"email_activation_key"`
 	CreatedAt          int64  `json:"created_at"`
-	CreatedByUserID    int64  `json:"created_by_user_id" crud:"link:CreatedByUser"`
+	CreatedByUserID    int64  `json:"created_by_user_id"`
 }
 
 type Session struct {
@@ -15,7 +15,7 @@ type Session struct {
 	Flags     int64  `json:"session_flags"`
 	Key       string `json:"session_key" crud:"lenmax:50"`
 	ExpiresAt int64  `json:"expires_at" crud:"req"`
-	UserID    int64  `json:"user_id" crud:"req link:User"`
+	UserID    int64  `json:"user_id" crud:"req"`
 }
 
 type Something struct {
