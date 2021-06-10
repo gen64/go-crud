@@ -39,6 +39,7 @@ type Helper struct {
 	fieldsValueNotNil map[string][2]bool
 	fieldsRegExp   map[string]*regexp.Regexp
 	fieldsDefaultValue map[string]string
+	fieldsUniq     map[string]bool
 
 	fieldsFlags map[string]int32
 	httpFlags   int32
@@ -216,8 +217,8 @@ func (h *Helper) getColsCommaSeparated(fields []string) (string, int, string, st
 }
 
 func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
-	h.reflectStructForDBQueries(u, dbTablePrefix)
 	h.reflectStructForValidation(u)
+	h.reflectStructForDBQueries(u, dbTablePrefix)
 	h.reflectStructForHTTP(u)
 }
 
@@ -252,7 +253,11 @@ func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) 
 		dbCol := h.getDBCol(field.Name)
 		h.dbFieldCols[field.Name] = dbCol
 		h.dbCols[dbCol] = field.Name
-		dbColParams := h.getDBColParams(field.Name, field.Type.String())
+		uniq := false
+		if h.fieldsUniq[field.Name] == true {
+			uniq = true
+		}
+		dbColParams := h.getDBColParams(field.Name, field.Type.String(), uniq)
 
 		colsWithTypes = h.addWithComma(colsWithTypes, dbCol+" "+dbColParams)
 		cols = h.addWithComma(cols, dbCol)
@@ -287,6 +292,7 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 	h.fieldsRegExp = make(map[string]*regexp.Regexp)
 	h.fieldsFlags = make(map[string]int32)
 	h.fieldsDefaultValue = make(map[string]string)
+	h.fieldsUniq = make(map[string]bool)
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
@@ -361,6 +367,9 @@ func (h *Helper) setFieldFromTagOptWithoutVal(opt string, fieldIdx int, fieldNam
 	}
 	if opt == "email" {
 		h.fieldsEmail[fieldName] = true
+	}
+	if opt == "uniq" {
+		h.fieldsUniq[fieldName] = true
 	}
 }
 
@@ -474,7 +483,7 @@ func (h *Helper) getDBCol(n string) string {
 	return dbCol
 }
 
-func (h *Helper) getDBColParams(n string, t string) string {
+func (h *Helper) getDBColParams(n string, t string, uniq bool) string {
 	dbColParams := ""
 	if n == "ID" {
 		dbColParams = "SERIAL PRIMARY KEY"
@@ -491,6 +500,9 @@ func (h *Helper) getDBColParams(n string, t string) string {
 		default:
 			dbColParams = "VARCHAR(255)"
 		}
+	}
+	if uniq {
+		dbColParams += " UNIQUE"
 	}
 	return dbColParams
 }

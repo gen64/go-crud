@@ -14,7 +14,7 @@ func TestSQLQueries(t *testing.T) {
 	}
 
 	got = h.GetQueryCreateTable()
-	want = "CREATE TABLE test_structs (test_struct_id SERIAL PRIMARY KEY,test_struct_flags BIGINT,primary_email VARCHAR(255),email_secondary VARCHAR(255),first_name VARCHAR(255),last_name VARCHAR(255),age BIGINT,price BIGINT,post_code VARCHAR(255),post_code2 VARCHAR(255),password VARCHAR(255),created_by_user_id BIGINT,key VARCHAR(255))"
+	want = "CREATE TABLE test_structs (test_struct_id SERIAL PRIMARY KEY,test_struct_flags BIGINT,primary_email VARCHAR(255),email_secondary VARCHAR(255),first_name VARCHAR(255),last_name VARCHAR(255),age BIGINT,price BIGINT,post_code VARCHAR(255),post_code2 VARCHAR(255),password VARCHAR(255),created_by_user_id BIGINT,key VARCHAR(255) UNIQUE)"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
