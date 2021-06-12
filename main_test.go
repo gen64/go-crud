@@ -117,10 +117,10 @@ func removeDocker() {
 	dockerPool.Purge(dockerResource)
 }
 
-func getTableName(tblName string) (string, error) {
-	n := ""
-	err := dbConn.QueryRow("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_schema,table_name").Scan(&n)
-	return n, err
+func getTableNameCnt(tblName string) (int64, error) {
+	var cnt int64
+	err := dbConn.QueryRow("SELECT COUNT(table_name) AS c FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1", tblName).Scan(&cnt)
+	return cnt, err
 }
 
 func getRow() (int64, int64, string, string, string, string, int, int, string, string, string, int64, string, error) {

@@ -45,12 +45,12 @@ func TestCreateDBTables(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	_ = testController.CreateDBTables(ts)
 
-	n, err := getTableName("gen64_test_structs")
-	if n != "gen64_test_structs" {
-		t.Fatalf("CreateDBTables failed to create table for a struct")
+	cnt, err2 := getTableNameCnt("gen64_test_structs")
+	if err2 != nil {
+		t.Fatalf("CreateDBTables failed to create table for a struct: %s", err2.Error())
 	}
-	if err != nil {
-		t.Fatalf("CreateDBTables failed to create table for a struct: %s", err.Error())
+	if cnt == 0 {
+		t.Fatalf("CreateDBTables failed to create the table")
 	}
 }
 
@@ -247,37 +247,25 @@ func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
 
 func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 }
+*/
 
 func TestDropDBTables(t *testing.T) {
-	ts1 := &TestStruct1{}
-	_ = mc.DropDBTables(ts1)
-
-	n, err := getTableName("f0x_test_struct1s")
-	if err != sql.ErrNoRows || n != "" {
-		t.Fatalf("DropDBTables failed to drop table for a struct: %s", err)
+	ts := testStructNewFunc().(*TestStruct)
+	err := testController.DropDBTables(ts)
+	if err != nil {
+		t.Fatalf("DropDBTables failed to drop table for a struct: %s", err.Op)
 	}
 
-	removeDocker()
+	cnt, err2 := getTableNameCnt("gen64_test_structs")
+	if err2 != nil {
+		t.Fatalf("DropDBTables failed to drop table for a struct: %s", err2.Error())
+	}
+	if cnt > 0 {
+		t.Fatalf("DropDBTables failed to drop the table")
+	}
 }
 
-
-func removeDocker() {
-	_ = pool.Purge(resource)
-}
-
-
-
-func getRowById(id int64) (int64, string, int, int, int, string, error) {
-	var flags int64
-	var email string
-	var age int
-	var price int
-	var currencyRate int
-	var postCode string
-	err := db.QueryRow("SELECT test_struct1_flags, email, age, price, currency_rate, post_code FROM f0x_test_struct1s WHERE test_struct1_id = $1", int64(id)).Scan(&flags, &email, &age, &price, &currencyRate, &postCode)
-	return flags, email, age, price, currencyRate, postCode, err
-}
-
+/*
 func makePUTInsertRequest(j string, t *testing.T) {
 	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+"/"+httpURI+"/", bytes.NewReader([]byte(j)))
 	if err != nil {
