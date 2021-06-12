@@ -29,7 +29,7 @@ func TestSQLInsertQueries(t *testing.T) {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
 
-	got = h.GetQueryInsert([]string{"Flags","EmailSecondary","LastName"})
+	got = h.GetQueryInsert([]string{"Flags", "EmailSecondary", "LastName"})
 	want = "INSERT INTO test_structs(test_struct_flags,email_secondary,last_name) VALUES ($1,$2,$3) RETURNING test_struct_id"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
@@ -45,7 +45,7 @@ func TestSQLUpdateQueries(t *testing.T) {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
 
-	got = h.GetQueryUpdateById([]string{"Flags","EmailSecondary","LastName"})
+	got = h.GetQueryUpdateById([]string{"Flags", "EmailSecondary", "LastName"})
 	want = "UPDATE test_structs SET test_struct_flags=$1,email_secondary=$2,last_name=$3 WHERE test_struct_id = $4"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
@@ -71,7 +71,7 @@ func TestSQLSelectQueries(t *testing.T) {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
 
-	got = h.GetQuerySelectById([]string{"Flags","EmailSecondary","LastName"})
+	got = h.GetQuerySelectById([]string{"Flags", "EmailSecondary", "LastName"})
 	want = "SELECT test_struct_flags,email_secondary,last_name FROM test_structs WHERE test_struct_id = $1"
 	if got != want {
 		t.Fatalf("Want %v, got %v", want, got)
@@ -83,7 +83,7 @@ func TestSQLSelectQueries(t *testing.T) {
 		t.Fatalf("want %v, got %v", want, got)
 	}
 
-	got = h.GetQuerySelect([]string{"EmailSecondary","Age"}, nil, 67, 13, nil)
+	got = h.GetQuerySelect([]string{"EmailSecondary", "Age"}, nil, 67, 13, nil)
 	want = "SELECT email_secondary,age FROM test_structs LIMIT 67 OFFSET 13"
 	if got != want {
 		t.Fatalf("want %v, got %v", want, got)
@@ -95,7 +95,7 @@ func TestSQLSelectQueries(t *testing.T) {
 		t.Fatalf("want %v, got %v", want, got)
 	}
 
-	got = h.GetQuerySelect([]string{"Age"}, []string{"EmailSecondary", "desc", "Age", "asc"}, 67, 13, map[string]interface{}{"Price":4444,"PostCode2":"11-111"})
+	got = h.GetQuerySelect([]string{"Age"}, []string{"EmailSecondary", "desc", "Age", "asc"}, 67, 13, map[string]interface{}{"Price": 4444, "PostCode2": "11-111"})
 	want = "SELECT age FROM test_structs WHERE post_code2=$1 AND price=$2 ORDER BY email_secondary DESC,age ASC LIMIT 67 OFFSET 13"
 	if got != want {
 		t.Fatalf("want %v, got %v", want, got)
@@ -137,7 +137,6 @@ func TestPluralName(t *testing.T) {
 		t.Fatalf("Want %v, got %v", want, got)
 	}
 }
-
 
 func TestValidationFields(t *testing.T) {
 	h := NewHelper(testStructObj, "")
@@ -225,4 +224,3 @@ func TestValidationFields(t *testing.T) {
 		t.Fatalf("Want ^[0-9]{2}\\-[0-9]{3}$, got %v", h.fieldsRegExp["PostCode2"].String())
 	}
 }
-

@@ -1,34 +1,33 @@
 package crud
 
-/*import (
-	"bytes"
-	"context"
-	"database/sql"
-	"encoding/json"
+import (
+	_ "bytes"
+	_ "context"
+	_ "database/sql"
+	_ "encoding/json"
 	"fmt"
 	_ "github.com/lib/pq"
-	"github.com/ory/dockertest/v3"
-	"io/ioutil"
+	_ "github.com/ory/dockertest/v3"
+	_ "io/ioutil"
 	"log"
-	"net/http"
+	_ "net/http"
 	"testing"
-	"time"
-)*/
+	_ "time"
+)
 
-/*
 func TestGetModelIDInterface(t *testing.T) {
-	ts1 := &TestStruct1{}
-	ts1.ID = 123
-	i := mc.GetModelIDInterface(ts1)
+	ts := testStructNewFunc().(*TestStruct)
+	ts.ID = 123
+	i := testController.GetModelIDInterface(ts)
 	if *(i.(*int64)) != int64(123) {
 		log.Fatalf("GetModelIDInterface failed to get ID")
 	}
 }
 
 func TestGetModelIDValue(t *testing.T) {
-	ts1 := &TestStruct1{}
-	ts1.ID = 123
-	v := mc.GetModelIDValue(ts1)
+	ts := testStructNewFunc().(*TestStruct)
+	ts.ID = 123
+	v := testController.GetModelIDValue(ts)
 	if v != 123 {
 		log.Fatalf("GetModelIDValue failed to get ID")
 	}
@@ -43,85 +42,125 @@ func TestResetFields(t *testing.T) {
 }
 
 func TestCreateDBTables(t *testing.T) {
-	createDocker()
-	createController()
+	ts := testStructNewFunc().(*TestStruct)
+	_ = testController.CreateDBTables(ts)
 
-	ts1 := &TestStruct1{}
-	_ = mc.CreateDBTables(ts1)
-
-	n, err := getTableName("f0x_test_struct1s")
-	if err != nil || n != "f0x_test_struct1s" {
-		t.Fatalf("CreateDBTables failed to create table for a struct: %s", err)
+	n, err := getTableName("gen64_test_structs")
+	if n != "gen64_test_structs" {
+		t.Fatalf("CreateDBTables failed to create table for a struct")
+	}
+	if err != nil {
+		t.Fatalf("CreateDBTables failed to create table for a struct: %s", err.Error())
 	}
 }
 
 func TestValidate(t *testing.T) {
+	// TODO
 }
 
 func TestSaveToDB(t *testing.T) {
-	ts1 := &TestStruct1{Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112"}
-	_ = mc.SaveToDB(ts1)
-	id, flags, email, age, price, rate, code, err := getRow()
-	if err != nil || flags != 4 || email != "test@example.com" || age != 37 || price != 1000 || rate != 14432 || code != "66-112" {
-		t.Fatalf("SaveToDB failed to insert struct to the table: %s", err)
+	ts := getTestStructWithData()
+
+	err := testController.SaveToDB(ts)
+	if err != nil {
+		t.Fatalf("SaveToDB failed to insert struct to the table: %s", err.Op)
+	}
+	id, flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err2 := getRow()
+	if err2 != nil {
+		t.Fatalf("SaveToDB failed to insert struct to the table: %s", err.Error())
+	}
+	if id == 0 || flags != ts.Flags || primaryEmail != ts.PrimaryEmail || emailSecondary != ts.EmailSecondary || firstName != ts.FirstName || lastName != ts.LastName || age != ts.Age || price != ts.Price || postCode != ts.PostCode || postCode2 != ts.PostCode2 || createdByUserID != ts.CreatedByUserID || key != ts.Key {
+		t.Fatalf("SaveToDB failed to insert struct to the table")
+	}
+	if password == "" {
+		t.Fatalf("SaveToDB failed to insert struct to the table and ignore 'nocreate' field")
 	}
 
-	ts1.Flags = 7
-	ts1.Email = "test2@example.com"
-	ts1.Age = 40
-	ts1.Price = 2000
-	ts1.CurrencyRate = 14411
-	ts1.PostCode = "17-112"
-	_ = mc.SaveToDB(ts1)
+	ts.Flags = 7
+	ts.PrimaryEmail = "primary1@gen64.net"
+	ts.EmailSecondary = "secondary2@gen64.net"
+	ts.FirstName = "Johnny"
+	ts.LastName = "Smithsy"
+	ts.Age = 50
+	ts.Price = 222
+	ts.PostCode = "22-222"
+	ts.PostCode2 = "33-333"
+	ts.Password = "xxx"
+	ts.CreatedByUserID = 7
+	ts.Key = "reallyunique"
+	_ = testController.SaveToDB(ts)
 
-	flags, email, age, price, rate, code, err = getRowById(id)
-	if err != nil || flags != 7 || email != "test2@example.com" || age != 40 || price != 2000 || rate != 14411 || code != "17-112" {
-		t.Fatalf("SaveToDB failed to insert struct to the table: %s", err)
+	flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err2 = getRowById(id)
+	if err2 != nil {
+		t.Fatalf("SaveToDB failed to update struct in the table: %s", err.Error())
 	}
-
-	globalId = id
+	if id == 0 || flags != ts.Flags || primaryEmail != ts.PrimaryEmail || emailSecondary != ts.EmailSecondary || firstName != ts.FirstName || lastName != ts.LastName || age != ts.Age || price != ts.Price || postCode != ts.PostCode || postCode2 != ts.PostCode2 || createdByUserID != ts.CreatedByUserID || key != ts.Key || password != ts.Password {
+		t.Fatalf("SaveToDB failed to update struct to the table")
+	}
 }
 
 func TestSetFromDB(t *testing.T) {
-	ts1 := &TestStruct1{}
-	_ = mc.SetFromDB(ts1, fmt.Sprintf("%d", globalId))
+	ts := getTestStructWithData()
+	err := testController.SaveToDB(ts)
+	if err != nil {
+		t.Fatalf("SaveToDB in TestSetFromDB failed to insert struct to the table: %s", err.Op)
+	}
 
-	if ts1.ID == 0 || ts1.Flags != 7 || ts1.Email != "test2@example.com" || ts1.Age != 40 || ts1.Price != 2000 || ts1.CurrencyRate != 14411 || ts1.PostCode != "17-112" {
-		t.Fatalf("SetFromDB failed to get struct from the table")
+	ts2 := testStructNewFunc().(*TestStruct)
+	err = testController.SetFromDB(ts2, fmt.Sprintf("%d", ts.ID))
+	if err != nil {
+		t.Fatalf("SetFromDB failed to get data: %s", err.Op)
+	}
+
+	if !areTestStructObjectSame(ts, ts2) {
+		t.Fatalf("SetFromDB failed to set struct with data: %s", err.Op)
 	}
 }
 
 func TestDeleteFromDB(t *testing.T) {
-	ts1 := &TestStruct1{}
-	_ = mc.SetFromDB(ts1, fmt.Sprintf("%d", globalId))
-	_ = mc.DeleteFromDB(ts1)
+	ts := getTestStructWithData()
+	err := testController.SaveToDB(ts)
+	if err != nil {
+		t.Fatalf("SaveToDB in TestDeleteFromDB failed to insert struct to the table: %s", err.Op)
+	}
+	err = testController.DeleteFromDB(ts)
+	if err != nil {
+		t.Fatalf("DeleteFromDB failed to remove: %s", err.Op)
+	}
 
-	_, _, _, _, _, _, err := getRowById(globalId)
-	if err != sql.ErrNoRows {
+	cnt, err2 := getRowCntById(ts.ID)
+	if err2 != nil {
 		t.Fatalf("DeleteFromDB failed to delete struct from the table")
 	}
-	if ts1.ID != 0 {
+	if cnt > 0 {
+		t.Fatalf("DeleteFromDB failed to delete struct from the table")
+	}
+	if ts.ID != 0 {
 		t.Fatalf("DeleteFromDB failed to set ID to 0 on the struct")
 	}
-	globalId = 0
 }
 
 func TestGetFromDB(t *testing.T) {
-	ts1 := &TestStruct1{Flags: 4, Email: "test@example.com", Age: 37, Price: 1000, CurrencyRate: 14432, PostCode: "66-112"}
-	for i := 0; i < 50; i++ {
-		ts1.ID = 0
-		ts1.Age = 30 + i
-		mc.SaveToDB(ts1)
+	for i := 1; i < 51; i++ {
+		ts := getTestStructWithData()
+		ts.ID = 0
+		ts.Age = 30 + i
+		testController.SaveToDB(ts)
 	}
-	xts1, _ := mc.GetFromDB(newObjFunc, map[string]string{"Age": "asc", "Price": "asc"}, 10, 20, map[string]interface{}{"Price": 1000, "Email": "test@example.com"})
-	if len(xts1) != 10 {
-		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 10, len(xts1))
+
+	testStructs, err := testController.GetFromDB(testStructNewFunc, []string{"Age", "asc", "Price", "asc"}, 10, 20, map[string]interface{}{"Price": 444, "PrimaryEmail": "primary@gen64.net"})
+	if err != nil {
+		t.Fatalf("GetFromDB failed to return list of objects: %s", err.Op)
 	}
-	if xts1[2].(*TestStruct1).Age != 52 {
-		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 52, xts1[2].(*TestStruct1).Age)
+	if len(testStructs) != 10 {
+		t.Fatalf("GetFromDB failed to return list of objects, want %v, got %v", 10, len(testStructs))
+	}
+	if testStructs[2].(*TestStruct).Age != 52 {
+		t.Fatalf("GetFromDB failed to return correct list of objects, want %v, got %v", 52, testStructs[2].(*TestStruct).Age)
 	}
 }
 
+/*
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
 }
 
@@ -226,23 +265,7 @@ func removeDocker() {
 	_ = pool.Purge(resource)
 }
 
-func getTableName(tblName string) (string, error) {
-	n := ""
-	err := db.QueryRow("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_schema,table_name").Scan(&n)
-	return n, err
-}
 
-func getRow() (int64, int64, string, int, int, int, string, error) {
-	var id int64
-	var flags int64
-	var email string
-	var age int
-	var price int
-	var currencyRate int
-	var postCode string
-	err := db.QueryRow("SELECT * FROM f0x_test_struct1s ORDER BY test_struct1_id DESC LIMIT 1").Scan(&id, &flags, &email, &age, &price, &currencyRate, &postCode)
-	return id, flags, email, age, price, currencyRate, postCode, err
-}
 
 func getRowById(id int64) (int64, string, int, int, int, string, error) {
 	var flags int64

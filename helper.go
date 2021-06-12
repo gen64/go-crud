@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
-	"sort"
 )
 
 // Helper reflects the object to generate and cache PostgreSQL queries
@@ -32,14 +32,14 @@ type Helper struct {
 	dbCols      map[string]string
 	url         string
 
-	fieldsRequired map[string]bool
-	fieldsLength   map[string][2]int
-	fieldsEmail    map[string]bool
-	fieldsValue    map[string][2]int
-	fieldsValueNotNil map[string][2]bool
-	fieldsRegExp   map[string]*regexp.Regexp
+	fieldsRequired     map[string]bool
+	fieldsLength       map[string][2]int
+	fieldsEmail        map[string]bool
+	fieldsValue        map[string][2]int
+	fieldsValueNotNil  map[string][2]bool
+	fieldsRegExp       map[string]*regexp.Regexp
 	fieldsDefaultValue map[string]string
-	fieldsUniq     map[string]bool
+	fieldsUniq         map[string]bool
 
 	fieldsFlags map[string]int32
 	httpFlags   int32
@@ -141,7 +141,7 @@ func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offs
 
 	qOrder := ""
 	if order != nil && len(order) > 0 {
-		for i:=0; i<len(order); i=i+2 {
+		for i := 0; i < len(order); i = i + 2 {
 			k := order[i]
 			v := order[i+1]
 
@@ -384,7 +384,7 @@ func (h *Helper) setFieldFromTagOptWithVal(opt string, fieldIdx int, fieldName s
 			i, err := strconv.Atoi(val)
 			if err != nil {
 				return &HelperError{
-					Op: "ParseTag",
+					Op:  "ParseTag",
 					Tag: valOpt,
 					Err: fmt.Errorf("strconv.Atoi failed: %w", err),
 				}
@@ -415,22 +415,22 @@ func (h *Helper) setFieldHTTPFromTag(tag string, fieldIdx int, fieldName string)
 	if len(opts) > 0 {
 		for _, v := range opts {
 			if v == "nocreate" {
-				if h.fieldsFlags[fieldName] & HTTPNoCreate == 0 {
+				if h.fieldsFlags[fieldName]&HTTPNoCreate == 0 {
 					h.fieldsFlags[fieldName] += HTTPNoCreate
 				}
 			}
 			if v == "noread" {
-				if h.fieldsFlags[fieldName] & HTTPNoRead == 0 {
+				if h.fieldsFlags[fieldName]&HTTPNoRead == 0 {
 					h.fieldsFlags[fieldName] += HTTPNoRead
 				}
 			}
 			if v == "noupdate" {
-				if h.fieldsFlags[fieldName] & HTTPNoUpdate == 0 {
+				if h.fieldsFlags[fieldName]&HTTPNoUpdate == 0 {
 					h.fieldsFlags[fieldName] += HTTPNoUpdate
 				}
 			}
 			if v == "nolist" {
-				if h.fieldsFlags[fieldName] & HTTPNoList == 0 {
+				if h.fieldsFlags[fieldName]&HTTPNoList == 0 {
 					h.fieldsFlags[fieldName] += HTTPNoList
 				}
 			}
@@ -443,27 +443,27 @@ func (h *Helper) setHTTPFromTag(tag string) {
 	if len(opts) > 0 {
 		for _, v := range opts {
 			if v == "nocreate" {
-				if h.httpFlags & HTTPNoCreate == 0 {
+				if h.httpFlags&HTTPNoCreate == 0 {
 					h.httpFlags += HTTPNoCreate
 				}
 			}
 			if v == "noread" {
-				if h.httpFlags & HTTPNoRead == 0 {
+				if h.httpFlags&HTTPNoRead == 0 {
 					h.httpFlags += HTTPNoRead
 				}
 			}
 			if v == "noupdate" {
-				if h.httpFlags & HTTPNoUpdate == 0 {
+				if h.httpFlags&HTTPNoUpdate == 0 {
 					h.httpFlags += HTTPNoUpdate
 				}
 			}
 			if v == "nodelete" {
-				if h.httpFlags & HTTPNoDelete == 0 {
+				if h.httpFlags&HTTPNoDelete == 0 {
 					h.httpFlags += HTTPNoDelete
 				}
 			}
 			if v == "nolist" {
-				if h.httpFlags & HTTPNoList == 0 {
+				if h.httpFlags&HTTPNoList == 0 {
 					h.httpFlags += HTTPNoList
 				}
 			}

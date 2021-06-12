@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -220,7 +221,6 @@ func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, lim
 		}
 		v = append(v, newObj)
 	}
-
 	return v, nil
 }
 
@@ -253,9 +253,16 @@ func (c Controller) GetModelFieldInterfaces(obj interface{}) []interface{} {
 // querying)
 func (c Controller) GetFiltersInterfaces(mf map[string]interface{}) []interface{} {
 	var xi []interface{}
+
 	if mf != nil && len(mf) > 0 {
-		for _, v := range mf {
-			xi = append(xi, v)
+		sorted := []string{}
+		for k, _ := range mf {
+			sorted = append(sorted, k)
+		}
+		sort.Strings(sorted)
+
+		for _, v := range sorted {
+			xi = append(xi, mf[v])
 		}
 	}
 	return xi
@@ -313,6 +320,7 @@ func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) fu
 // Validate checks object's fields. It returns result of validation as
 // a bool and list of fields with invalid value
 func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (bool, []string, error) {
+	return true, []string{}, nil
 	failedFields := []string{}
 	b := true
 
