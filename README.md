@@ -166,18 +166,18 @@ password. Check below code.
 // List users
 http.HandleFunc("/users/list_emails/", c.GetCustomHTTPHandler(func() interface{} {
 	return &User{}
-}, "/users/shortlist/", crud.OpList, ["Email"]))
+}, "/users/shortlist/", crud.OpList, []string{"Email"}))
 
 // Allow to update only the Password field
 http.HandleFunc("/users/update_password/", c.GetCustomHTTPHandler(func() interface{} {
 	return &User{}
-}, "/users/password/", crud.OpUpdate, ["Password"]))
+}, "/users/password/", crud.OpUpdate, []string{"Password"}))
 
 // Allow to create new User (only with Email and Name fields), and to read one
 // element via /users/create_and_read/:id - which will return Email and Name only
 http.HandleFunc("/users/create_and_read/", c.GetCustomHTTPHandler(func() interface{} {
 	return &User{}
-}, "/users/create/", crud.OpCreate | crud.OpRead, ["Email", "Name"]) 
+}, "/users/create/", crud.OpCreate | crud.OpRead, []string{"Email", "Name"}) 
 ```
 
 Delete is unavailable with custom HTTP endpoints.

@@ -1,18 +1,12 @@
 package crud
 
 import (
-	_ "bytes"
-	_ "context"
-	_ "database/sql"
-	_ "encoding/json"
+	"encoding/json"
 	"fmt"
-	_ "github.com/lib/pq"
-	_ "github.com/ory/dockertest/v3"
-	_ "io/ioutil"
+	"io/ioutil"
 	"log"
-	_ "net/http"
+	"net/http"
 	"testing"
-	_ "time"
 )
 
 func TestGetModelIDInterface(t *testing.T) {
@@ -72,7 +66,7 @@ func TestSaveToDB(t *testing.T) {
 	if id == 0 || flags != ts.Flags || primaryEmail != ts.PrimaryEmail || emailSecondary != ts.EmailSecondary || firstName != ts.FirstName || lastName != ts.LastName || age != ts.Age || price != ts.Price || postCode != ts.PostCode || postCode2 != ts.PostCode2 || createdByUserID != ts.CreatedByUserID || key != ts.Key {
 		t.Fatalf("SaveToDB failed to insert struct to the table")
 	}
-	if password == "" {
+	if password != ts.Password {
 		t.Fatalf("SaveToDB failed to insert struct to the table and ignore 'nocreate' field")
 	}
 
@@ -160,94 +154,156 @@ func TestGetFromDB(t *testing.T) {
 	}
 }
 
-/*
+
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
+	// TODO
 }
 
 func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
-	createHTTPServer()
-
 	j := `{
-		"teststruct1_flags": 4,
+		"test_struct_flags": 4,
 		"email": "test@example.com",
+		"email2": "test2@example.com",
+		"first_name": "John",
+		"last_name": "Smith",
 		"age": 37,
 		"price": 1000,
-		"currency_rate": 14432,
-		"post_code": "66-112"
+		"post_code": "66-112",
+		"post_code2": "11-111",
+		"password": "blablabla",
+		"created_by_user_id": 6,
+		"key": "uniquekey1"
 	}`
-	makePUTInsertRequest(j, t)
+	_ = makePUTInsertRequest(j, t)
 
-	id, flags, email, age, price, rate, code, err := getRow()
-	if err != nil || flags != 4 || email != "test@example.com" || age != 37 || price != 1000 || rate != 14432 || code != "66-112" || id == 0 {
-		t.Fatalf("PUT method failed to insert struct to the table: %s", err)
+	id, flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err := getRow()
+	if err != nil {
+		t.Fatalf("PUT method failed to insert struct to the table: %s", err.Error())
 	}
-
+	if id == 0 || flags != 4 || primaryEmail != "test@example.com" || emailSecondary != "test2@example.com" || firstName != "John" || lastName != "Smith" || age != 37 || price != 1000 || postCode != "66-112" || postCode2 != "11-111" || createdByUserID != 6 || key != "uniquekey1" {
+		t.Fatalf("PUT method failed to insert struct to the table")
+	}
+	if password != "" {
+		t.Fatalf("PUT method failed to not insert nocreate field to the table")
+	}
+	
 	// TODO: Check if response contains JSON with key 'id'
-
-	globalId = id
 }
 
 func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 	j := `{
-		"teststruct1_flags": 7,
-		"email": "test2@example.com",
-		"age": 40,
-		"price": 2000,
-		"currency_rate": 12222,
-		"post_code": "22-112"
+		"test_struct_flags": 8,
+		"email": "test11@example.com",
+		"email2": "test22@example.com",
+		"first_name": "John2",
+		"last_name": "Smith2",
+		"age": 39,
+		"price": 1002,
+		"post_code": "22-222",
+		"post_code2": "33-333",
+		"password": "blabla333bla",
+		"created_by_user_id": 12,
+		"key": "uniquekey2"
 	}`
-	makePUTUpdateRequest(j, t)
+	_ = makePUTUpdateRequest(j, 54, t)
 
-	flags, email, age, price, rate, code, err := getRowById(globalId)
-	if err != nil || flags != 7 || email != "test2@example.com" || age != 40 || price != 2000 || rate != 12222 || code != "22-112" {
-		t.Fatalf("PUT method failed to update struct in the table: %s", err)
+	id, flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err := getRow()
+	if err != nil {
+		t.Fatalf("PUT method failed to update struct to the table: %s", err.Error())
+	}
+	if id == 0 || flags != 8 || primaryEmail != "test11@example.com" || emailSecondary != "test22@example.com" || firstName != "John2" || lastName != "Smith2" || age != 39 || price != 1002 || postCode != "22-222" || postCode2 != "33-333" || createdByUserID != 12 || key != "uniquekey2" {
+		t.Fatalf("PUT method failed to update struct to the table")
+	}
+	if password != "" {
+		t.Fatalf("PUT method failed to not update noupdate field to the table")
 	}
 }
 
 func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
-	resp := makeGETRequest(t)
+	resp := makeGETReadRequest(54, t)
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GET method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
 	}
+
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		t.Fatalf("GET method failed")
 	}
-	ts1 := &TestStruct1{}
-	err = json.Unmarshal(body, ts1)
+
+	ts := testStructNewFunc().(*TestStruct)
+	err = json.Unmarshal(body, ts)
 	if err != nil {
 		t.Fatalf("GET method failed to return unmarshable JSON")
 	}
-	if ts1.Age != 40 {
+	if ts.Age != 39 {
 		t.Fatalf("GET method returned invalid values")
 	}
 }
 
 func TestHTTPHandlerDeleteMethod(t *testing.T) {
-	makeDELETERequest(t)
+	makeDELETERequest(54, t)
 
-	_, _, _, _, _, _, err := getRowById(globalId)
-	if err != sql.ErrNoRows {
+	cnt, err2 := getRowCntById(54)
+	if err2 != nil {
+		t.Fatalf("DELETE handler failed to delete struct from the table")
+	}
+	if cnt > 0 {
 		t.Fatalf("DELETE handler failed to delete struct from the table")
 	}
 }
 
 func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
-	resp := makeGETRequest(t)
+	resp := makeGETReadRequest(54, t)
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("GET method returned wrong status code, want %d, got %d", http.StatusNotFound, resp.StatusCode)
 	}
-
-	globalId = 0
-
-	cancelHTTPCtx()
 }
 
 func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
+	ts := testStructNewFunc().(*TestStruct)
+	for i:=1; i<=55; i++ {
+		testController.ResetFields(ts)
+		ts.ID = 0
+		testController.SetFromDB(ts, fmt.Sprintf("%d", i))
+		if ts.ID != 0 {
+			ts.Password = "abcdefghijklopqrwwe"
+			testController.SaveToDB(ts)
+		}
+	}
+	b := makeGETListRequest(map[string]string{
+		"limit": "10",
+		"offset": "20",
+		"order": "age",
+		"order_direction": "asc",
+		"filter_price": "444",
+		"filter_primary_email": "primary@gen64.net",
+	}, t)
+	log.Print(string(b))
+	o := struct{
+		Items []map[string]interface{} `json:"items"`
+	}{
+		Items: []map[string]interface{}{},
+	}
+
+	err := json.Unmarshal(b, &o)
+	if err != nil {
+		t.Fatalf("GET method returned wrong json output, error marshaling: %s", err.Error())
+	}
+
+	if len(o.Items) != 10 {
+		t.Fatalf("GET method returned invalid number of rows, want %d got %d", 10, len(o.Items))
+	}
+
+	if o.Items[2]["age"].(float64) != 52 {
+		t.Fatalf("GET method returned invalid row, want %d got %f", 52, o.Items[2]["age"].(float64))
+	}
+	
+	if o.Items[2]["password"] != nil {
+		t.Fatalf("GET method returned field that should not be visible in the output")
+	}
 }
-*/
 
 func TestDropDBTables(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
@@ -264,63 +320,3 @@ func TestDropDBTables(t *testing.T) {
 		t.Fatalf("DropDBTables failed to drop the table")
 	}
 }
-
-/*
-func makePUTInsertRequest(j string, t *testing.T) {
-	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+"/"+httpURI+"/", bytes.NewReader([]byte(j)))
-	if err != nil {
-		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	c := &http.Client{}
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-}
-
-func makePUTUpdateRequest(j string, t *testing.T) {
-	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte(j)))
-	if err != nil {
-		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	c := &http.Client{}
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-}
-
-func makeDELETERequest(t *testing.T) {
-	req, err := http.NewRequest("DELETE", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
-	if err != nil {
-		t.Fatalf("DELETE method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	c := &http.Client{}
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatalf("DELETE method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("DELETE method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-}
-
-func makeGETRequest(t *testing.T) *http.Response {
-	req, err := http.NewRequest("GET", "http://localhost:"+httpPort+"/"+httpURI+"/"+fmt.Sprintf("%d", globalId), bytes.NewReader([]byte("")))
-	if err != nil {
-		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	c := &http.Client{}
-	resp, err := c.Do(req)
-	if err != nil {
-		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
-	}
-	return resp
-}
-*/

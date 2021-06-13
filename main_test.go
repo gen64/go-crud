@@ -1,14 +1,17 @@
 package crud
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"testing"
 	"time"
+	"io/ioutil"
 
 	_ "github.com/lib/pq"
 	"github.com/ory/dockertest/v3"
@@ -54,7 +57,7 @@ type TestStruct struct {
 	PostCode2 string `json:"post_code2" crud:"lenmin:6" crud_regexp:"^[0-9]{2}\\-[0-9]{3}$"`
 
 	// Test HTTP endpoint tags
-	Password        string `json:"password" crud:"noread noupdate nocreate nolist"`
+	Password        string `json:"password" http:"noread noupdate nocreate nolist"`
 	CreatedByUserID int64  `json:"created_by_user_id" crud:"nocreate" crud_val:55`
 
 	// Test unique tag
@@ -106,7 +109,10 @@ func createHTTPServer() {
 	ctx, httpCancelCtx = context.WithCancel(context.Background())
 	go func(ctx context.Context) {
 		go func() {
-			http.HandleFunc("/"+httpURI+"/", testController.GetHTTPHandler(testStructNewFunc, "/"+httpURI+"/"))
+			http.HandleFunc(httpURI, testController.GetHTTPHandler(testStructNewFunc, httpURI))
+			/*http.HandleFunc("/"+httpURI+"/only_name/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/only_name/", OpList, []string{"FirstName", "LastName"}))
+			http.HandleFunc("/"+httpURI+"/update_price/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/update_price/", OpUpdate, []string{"Price"}))
+			http.HandleFunc("/"+httpURI+"/create/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/create/", OpCreate | OpRead, []string{"PrimaryEmail", "FirstName", "LastName", "Age"}))*/
 			http.ListenAndServe(":"+httpPort, nil)
 		}()
 	}(ctx)
@@ -200,4 +206,110 @@ func areTestStructObjectSame(ts1 *TestStruct, ts2 *TestStruct) bool {
 		return false
 	}
 	return true
+}
+
+func makePUTInsertRequest(j string, t *testing.T) []byte {
+	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+httpURI, bytes.NewReader([]byte(j)))
+	if err != nil {
+		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("PUT method failed to return body: %s", err.Error())
+	}
+	
+	return b
+}
+
+func makePUTUpdateRequest(j string, id int64, t *testing.T) []byte {
+	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+httpURI+fmt.Sprintf("%d", id), bytes.NewReader([]byte(j)))
+	if err != nil {
+		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("PUT method failed to return body: %s", err.Error())
+	}
+	
+	return b
+}
+
+func makeDELETERequest(id int64, t *testing.T) {
+	req, err := http.NewRequest("DELETE", "http://localhost:"+httpPort+httpURI+fmt.Sprintf("%d", id), bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("DELETE method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+}
+
+func makeGETReadRequest(id int64, t *testing.T) *http.Response {
+	req, err := http.NewRequest("GET", "http://localhost:"+httpPort+httpURI+fmt.Sprintf("%d", id), bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
+	}
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
+	}
+	return resp
+}
+
+func makeGETListRequest(uriParams map[string]string, t *testing.T) []byte {
+	uriParamString := ""
+	for k, v := range uriParams {
+		uriParamString = addWithAmpersand(uriParamString, k+"="+url.QueryEscape(v))
+	}
+	req, err := http.NewRequest("GET", "http://localhost:"+httpPort+httpURI+"?"+uriParamString, bytes.NewReader([]byte{}))
+	if err != nil {
+		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
+	}
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		t.Fatalf("GET method failed on HTTP server with handler from GetHTTPHandler: %s", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+
+	b, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("PUT method failed to return body: %s", err.Error())
+	}
+	
+	return b
+}
+
+func addWithAmpersand(s string, v string) string {
+	if s != "" {
+		s += "&"
+	}
+	s += v
+	return s
 }

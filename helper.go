@@ -31,6 +31,7 @@ type Helper struct {
 	dbFieldCols map[string]string
 	dbCols      map[string]string
 	url         string
+	fields      []string
 
 	fieldsRequired     map[string]bool
 	fieldsLength       map[string][2]int
@@ -41,18 +42,21 @@ type Helper struct {
 	fieldsDefaultValue map[string]string
 	fieldsUniq         map[string]bool
 
-	fieldsFlags map[string]int32
-	httpFlags   int32
+	fieldsFlags map[string]int
+	httpFlags   int
 
 	err *HelperError
 }
 
-// Values for fieldsFlags and httpFlags
+// Values for fieldsFlags
 const HTTPNoRead = 2
 const HTTPNoUpdate = 4
 const HTTPNoCreate = 8
 const HTTPNoDelete = 16
 const HTTPNoList = 32
+const TypeInt64 = 64
+const TypeInt = 128
+const TypeString = 256
 
 // NewHelper takes object and database table name prefix as arguments and
 // returns Helper instance
@@ -65,6 +69,11 @@ func NewHelper(obj interface{}, dbTblPrefix string) *Helper {
 // Err returns error that occurred when reflecting struct
 func (h *Helper) Err() *HelperError {
 	return h.err
+}
+
+// GetHTTPFlags return http flags
+func (h *Helper) GetHTTPFlags() int {
+	return h.httpFlags
 }
 
 // GetQueryDropTable returns drop table query
@@ -127,7 +136,7 @@ func (h *Helper) GetQueryDeleteById() string {
 	return h.queryDeleteById
 }
 
-func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offset int, filters map[string]interface{}) string {
+func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offset int, filters map[string]interface{}, orderFieldsToInclude map[string]bool, filterFieldsToInclude map[string]bool) string {
 	s := h.querySelectPrefix
 	if len(fields) > 0 {
 		s = "SELECT "
@@ -144,6 +153,10 @@ func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offs
 		for i := 0; i < len(order); i = i + 2 {
 			k := order[i]
 			v := order[i+1]
+
+			if orderFieldsToInclude != nil && len(orderFieldsToInclude) > 0 && orderFieldsToInclude[k] != true && orderFieldsToInclude[h.dbCols[k]] != true {
+				continue
+			}
 
 			if h.dbFieldCols[k] == "" && h.dbCols[k] == "" {
 				continue
@@ -176,6 +189,9 @@ func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offs
 		sorted := []string{}
 		for k, _ := range filters {
 			if h.dbFieldCols[k] == "" {
+				continue
+			}
+			if filterFieldsToInclude != nil && len(filterFieldsToInclude) > 0 && filterFieldsToInclude[k] != true {
 				continue
 			}
 			sorted = append(sorted, h.dbFieldCols[k])
@@ -250,6 +266,16 @@ func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) 
 			continue
 		}
 
+		if field.Type.Kind() == reflect.Int64 {
+			h.fieldsFlags[field.Name] += TypeInt64
+		}
+		if field.Type.Kind() == reflect.Int {
+			h.fieldsFlags[field.Name] += TypeInt
+		}
+		if field.Type.Kind() == reflect.String {
+			h.fieldsFlags[field.Name] += TypeString
+		}
+
 		dbCol := h.getDBCol(field.Name)
 		h.dbFieldCols[field.Name] = dbCol
 		h.dbCols[dbCol] = field.Name
@@ -268,6 +294,8 @@ func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) 
 			colVals = h.addWithComma(colVals, dbCol+"=$"+strconv.Itoa(valCnt))
 			valCnt++
 		}
+
+		h.fields = append(h.fields, field.Name)
 	}
 
 	h.queryDropTable = fmt.Sprintf("DROP TABLE IF EXISTS %s", h.dbTbl)
@@ -290,7 +318,7 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 	h.fieldsValueNotNil = make(map[string][2]bool)
 	h.fieldsEmail = make(map[string]bool)
 	h.fieldsRegExp = make(map[string]*regexp.Regexp)
-	h.fieldsFlags = make(map[string]int32)
+	h.fieldsFlags = make(map[string]int)
 	h.fieldsDefaultValue = make(map[string]string)
 	h.fieldsUniq = make(map[string]bool)
 
@@ -331,9 +359,6 @@ func (h *Helper) reflectStructForHTTP(u interface{}) {
 			continue
 		}
 		h.setFieldHTTPFromTag(field.Tag.Get("http"), j, field.Name)
-		if h.err != nil {
-
-		}
 		if field.Name == "ID" {
 			h.setHTTPFromTag(field.Tag.Get("http_endpoint"))
 		}
@@ -488,17 +513,17 @@ func (h *Helper) getDBColParams(n string, t string, uniq bool) string {
 	if n == "ID" {
 		dbColParams = "SERIAL PRIMARY KEY"
 	} else if n == "Flags" {
-		dbColParams = "BIGINT"
+		dbColParams = "BIGINT DEFAULT 0"
 	} else {
 		switch t {
 		case "string":
-			dbColParams = "VARCHAR(255)"
+			dbColParams = "VARCHAR(255) DEFAULT ''"
 		case "int64":
-			dbColParams = "BIGINT"
+			dbColParams = "BIGINT DEFAULT 0"
 		case "int":
-			dbColParams = "BIGINT"
+			dbColParams = "BIGINT DEFAULT 0"
 		default:
-			dbColParams = "VARCHAR(255)"
+			dbColParams = "VARCHAR(255) DEFAULT ''"
 		}
 	}
 	if uniq {
@@ -613,4 +638,43 @@ func (h *Helper) parseTag(s string) (bool, int, int, bool, int, int, string, *He
 	}
 
 	return xb["req"], xi["lenmin"], xi["lenmax"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
+}
+
+func (h *Helper) getFieldsWithoutHTTPFlag(flag int, skipID bool) []string {
+	xs := []string{}
+	for _, field := range h.fields {
+		if field == "ID" && skipID == true {
+			continue
+		}
+		if h.fieldsFlags[field] & flag == 0 {
+			xs = append(xs, field)
+		}
+	}
+	return xs
+}
+
+func (h *Helper) getFieldsMap(fieldsToInclude map[string]bool) (map[string]interface{}, []interface{}) {
+	m := make(map[string]interface{})
+	xi := []interface{}{}
+
+	for _, field := range h.fields {
+		if len(fieldsToInclude) > 0 && fieldsToInclude[field] != true {
+			continue
+		}
+		if h.fieldsFlags[field] & TypeInt64 > 0 {
+			var i *int64
+			m[h.dbFieldCols[field]] = i
+		}
+		if h.fieldsFlags[field] & TypeInt > 0 {
+			var i *int
+			m[h.dbFieldCols[field]] = i
+		}
+		if h.fieldsFlags[field] & TypeString > 0 {
+			var s *string
+			m[h.dbFieldCols[field]] = s
+		}
+		xi = append(xi, m[h.dbFieldCols[field]])
+	}
+
+	return m, xi
 }
