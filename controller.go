@@ -206,10 +206,10 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 // GetFromDB runs a select query on the database with specified filters, order,
 // limit and offset and returns a list of objects
 func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
-	return c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, []string{}, false)
+	return c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, []string{})
 }
 
-func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}, fields []string, returnMap bool) ([]interface{}, *ControllerError) {
+func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}, fields []string) ([]interface{}, *ControllerError) {
 	obj := newObjFunc()
 	h, err := c.getHelper(obj)
 	if err != nil {
@@ -241,23 +241,7 @@ func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []s
 	}
 	defer rows.Close()
 
-	var newObjForMap interface{}
-	if returnMap {
-		newObjForMap = newObjFunc()
-	}
-
 	for rows.Next() {
-		if returnMap {
-			newMap, mapInterfaces := c.GetObjMap(fieldsToInclude, newObjForMap)
-			err3 := rows.Scan(mapInterfaces)
-			if err3 != nil {
-				return nil, &ControllerError{
-					Op: "DBQueryRowsScan",
-					Err: err3,
-				}
-			}
-			v = append(v, newMap)
-		} else {
 			newObj := newObjFunc()
 			err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(fieldsToInclude, newObj)...)...)
 			if err3 != nil {
@@ -267,7 +251,6 @@ func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []s
 				}
 			}
 			v = append(v, newObj)
-		}
 	}
 	return v, nil
 }
@@ -321,22 +304,6 @@ func (c Controller) GetFiltersInterfaces(fieldsToInclude map[string]bool, mf map
 		for _, v := range sorted {
 			xi = append(xi, mf[v])
 		}
-	}
-	return xi
-}
-
-// GetObjMap creates a map[string]interface{} based on object
-func (c Controller) GetObjMap(fieldsToInclude map[string]bool, obj interface{}) (map[string]interface{}, []interface{}) {
-	h, _ := c.getHelper(obj)
-	return h.getFieldsMap(fieldsToInclude)
-}
-
-func (c Controller) GetMapInterfaces(m *map[string]interface{}) []interface{} {
-	xi := []interface{}{}
-	val := reflect.ValueOf(m).Elem()
-	iter := reflect.Indirect(val).MapRange()
-	for iter.Next() {
-		xi = append(xi, iter.Value().Addr())
 	}
 	return xi
 }
@@ -729,7 +696,7 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 				}
 			}
 		}
-		xobj, err1 := c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, fields, true)
+		xobj, err1 := c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, fields)
 		if err1 != nil {
 			if err1.Op == "ValidateFilters" {
 				w.WriteHeader(http.StatusBadRequest)

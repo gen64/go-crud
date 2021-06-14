@@ -12,11 +12,11 @@ Models are defined with structs as follows (take a closer look at the tags):
 
 ```
 type User struct {
-	ID                 int    `json:"user_id" http_endpoint:"noread noupdate nocreate nodelete nolist"`
+	ID                 int    `json:"user_id"`
 	Flags              int    `json:"flags"`
 	Name               string `json:"name" crud:"req lenmin:2 lenmax:50"`
 	Email              string `json:"email" crud:"req"`
-	Password           string `json:"password" crud:"" http:"noread noupdate nocreate nolist"`
+	Password           string `json:"password"`
 	EmailActivationKey string `json:"email_activation_key" crud:""`
 	CreatedAt          int    `json:"created_at"`
 	CreatedByUserID    int    `json:"created_by_user_id"`
@@ -52,7 +52,6 @@ See below list of all the tags with examples.
 Tag | Example | Explanation
 --- | --- | ---
 `crud` | `crud:"req valmin:0 valmax:130 val:18"` | Struct field properties defining its valid value for model. See CRUD Field Properties for more info
-`http` | `http:"noread noupdate nocreate nolist"` | Struct field configuration for model's HTTP endpoint. See HTTP Field Properties for more info
 `crud_val` | `crud_val:"Default value"` | Struct field default value
 `crud_regexp` | `crud_regexp:"^[0-9]{2}\\-[0-9]{3}$"` | Regular expression that struct field must match
 `crud_testvalpattern` | `crud_testvalpattern:DD-DDD` | Very simple pattern for generating valid test value (used for tests). In the string, `D` is replaced with a digit
@@ -68,30 +67,6 @@ Property | Explanation
 `val` | Default value for the field. If the value is not a simple, short alphanumeric, use the `crud_val` tag for it
 `lenmin` | If field is string, this is a minimal length of the field value
 `lenmax` | If field is string, this is a maximal length of the field value
-
-
-##### HTTP Field Properties
-Below properties configure field presence in model's HTTP endpoint.
-
-Property | Explanation
---- | ---
-`noread` | Field will not be present in the output when getting single object
-`noupdate` | Field will not be updated (it will be ignored in the payload)
-`nocreate` | When creating a new object, field will have its default value (it will be ignored in the payload)
-`nolist` | Field will not be present in the output when getting any list of objects
-
-
-#### Model tags
-It is possible to define one additional tag `http_endpoint` in the first
-struct field. It's used to configure HTTP endpoint for the whole model (for 
-example User, in above case). Within the tag, you can define properties such
-as:
-
-* `noread` - HTTP endpoint will not allow to read (get) an object
-* `noupdate` - HTTP endpoint will not allow updating an object
-* `nocreate` - HTTP endpoint will not allow creating a new object
-* `nodelete` - HTTP endpoint will not allow delete an object
-* `nolist` - HTTP endpoint not allow listing objects
 
 
 ### Database storage

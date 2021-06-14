@@ -652,29 +652,3 @@ func (h *Helper) getFieldsWithoutHTTPFlag(flag int, skipID bool) []string {
 	}
 	return xs
 }
-
-func (h *Helper) getFieldsMap(fieldsToInclude map[string]bool) (map[string]interface{}, []interface{}) {
-	m := make(map[string]interface{})
-	xi := []interface{}{}
-
-	for _, field := range h.fields {
-		if len(fieldsToInclude) > 0 && fieldsToInclude[field] != true {
-			continue
-		}
-		if h.fieldsFlags[field] & TypeInt64 > 0 {
-			var i *int64
-			m[h.dbFieldCols[field]] = i
-		}
-		if h.fieldsFlags[field] & TypeInt > 0 {
-			var i *int
-			m[h.dbFieldCols[field]] = i
-		}
-		if h.fieldsFlags[field] & TypeString > 0 {
-			var s *string
-			m[h.dbFieldCols[field]] = s
-		}
-		xi = append(xi, m[h.dbFieldCols[field]])
-	}
-
-	return m, xi
-}

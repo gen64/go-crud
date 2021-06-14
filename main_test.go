@@ -57,7 +57,7 @@ type TestStruct struct {
 	PostCode2 string `json:"post_code2" crud:"lenmin:6" crud_regexp:"^[0-9]{2}\\-[0-9]{3}$"`
 
 	// Test HTTP endpoint tags
-	Password        string `json:"password" http:"noread noupdate nocreate nolist"`
+	Password        string `json:"password"`
 	CreatedByUserID int64  `json:"created_by_user_id" crud:"nocreate" crud_val:55`
 
 	// Test unique tag
