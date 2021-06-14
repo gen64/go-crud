@@ -63,11 +63,8 @@ func TestSaveToDB(t *testing.T) {
 	if err2 != nil {
 		t.Fatalf("SaveToDB failed to insert struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != ts.Flags || primaryEmail != ts.PrimaryEmail || emailSecondary != ts.EmailSecondary || firstName != ts.FirstName || lastName != ts.LastName || age != ts.Age || price != ts.Price || postCode != ts.PostCode || postCode2 != ts.PostCode2 || createdByUserID != ts.CreatedByUserID || key != ts.Key {
+	if id == 0 || flags != ts.Flags || primaryEmail != ts.PrimaryEmail || emailSecondary != ts.EmailSecondary || firstName != ts.FirstName || lastName != ts.LastName || age != ts.Age || price != ts.Price || postCode != ts.PostCode || postCode2 != ts.PostCode2 || createdByUserID != ts.CreatedByUserID || key != ts.Key || password != ts.Password {
 		t.Fatalf("SaveToDB failed to insert struct to the table")
-	}
-	if password != ts.Password {
-		t.Fatalf("SaveToDB failed to insert struct to the table and ignore 'nocreate' field")
 	}
 
 	ts.Flags = 7
@@ -170,7 +167,7 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 		"price": 1000,
 		"post_code": "66-112",
 		"post_code2": "11-111",
-		"password": "blablabla",
+		"password": "password123",
 		"created_by_user_id": 6,
 		"key": "uniquekey1"
 	}`
@@ -180,11 +177,8 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT method failed to insert struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != 4 || primaryEmail != "test@example.com" || emailSecondary != "test2@example.com" || firstName != "John" || lastName != "Smith" || age != 37 || price != 1000 || postCode != "66-112" || postCode2 != "11-111" || createdByUserID != 6 || key != "uniquekey1" {
+	if id == 0 || flags != 4 || primaryEmail != "test@example.com" || emailSecondary != "test2@example.com" || firstName != "John" || lastName != "Smith" || age != 37 || price != 1000 || postCode != "66-112" || postCode2 != "11-111" || createdByUserID != 6 || key != "uniquekey1" || password != "password123" {
 		t.Fatalf("PUT method failed to insert struct to the table")
-	}
-	if password != "" {
-		t.Fatalf("PUT method failed to not insert nocreate field to the table")
 	}
 	
 	// TODO: Check if response contains JSON with key 'id'
@@ -201,7 +195,7 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 		"price": 1002,
 		"post_code": "22-222",
 		"post_code2": "33-333",
-		"password": "blabla333bla",
+		"password": "password123updated",
 		"created_by_user_id": 12,
 		"key": "uniquekey2"
 	}`
@@ -211,11 +205,8 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT method failed to update struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != 8 || primaryEmail != "test11@example.com" || emailSecondary != "test22@example.com" || firstName != "John2" || lastName != "Smith2" || age != 39 || price != 1002 || postCode != "22-222" || postCode2 != "33-333" || createdByUserID != 12 || key != "uniquekey2" {
+	if id == 0 || flags != 8 || primaryEmail != "test11@example.com" || emailSecondary != "test22@example.com" || firstName != "John2" || lastName != "Smith2" || age != 39 || price != 1002 || postCode != "22-222" || postCode2 != "33-333" || createdByUserID != 12 || key != "uniquekey2" || password != "password123updated" {
 		t.Fatalf("PUT method failed to update struct to the table")
-	}
-	if password != "" {
-		t.Fatalf("PUT method failed to not update noupdate field to the table")
 	}
 }
 
@@ -280,7 +271,7 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 		"filter_price": "444",
 		"filter_primary_email": "primary@gen64.net",
 	}, t)
-	log.Print(string(b))
+
 	o := struct{
 		Items []map[string]interface{} `json:"items"`
 	}{
@@ -298,10 +289,6 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 
 	if o.Items[2]["age"].(float64) != 52 {
 		t.Fatalf("GET method returned invalid row, want %d got %f", 52, o.Items[2]["age"].(float64))
-	}
-	
-	if o.Items[2]["password"] != nil {
-		t.Fatalf("GET method returned field that should not be visible in the output")
 	}
 }
 

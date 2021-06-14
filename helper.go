@@ -43,17 +43,12 @@ type Helper struct {
 	fieldsUniq         map[string]bool
 
 	fieldsFlags map[string]int
-	httpFlags   int
+
+	flags int
 
 	err *HelperError
 }
 
-// Values for fieldsFlags
-const HTTPNoRead = 2
-const HTTPNoUpdate = 4
-const HTTPNoCreate = 8
-const HTTPNoDelete = 16
-const HTTPNoList = 32
 const TypeInt64 = 64
 const TypeInt = 128
 const TypeString = 256
@@ -71,9 +66,9 @@ func (h *Helper) Err() *HelperError {
 	return h.err
 }
 
-// GetHTTPFlags return http flags
-func (h *Helper) GetHTTPFlags() int {
-	return h.httpFlags
+// GetFlags returns flags
+func (h *Helper) GetFlags() int {
+	return h.flags
 }
 
 // GetQueryDropTable returns drop table query
@@ -87,48 +82,18 @@ func (h Helper) GetQueryCreateTable() string {
 }
 
 // GetQueryInsert returns insert query
-func (h *Helper) GetQueryInsert(fields []string) string {
-	if len(fields) == 0 {
-		return h.queryInsert
-	}
-
-	s := "INSERT INTO " + h.dbTbl + "("
-	qCols, _, qVals, _ := h.getColsCommaSeparated(fields)
-	if qCols == "" {
-		return h.queryInsert
-	}
-	s += qCols
-	s += ") VALUES (" + qVals + ") RETURNING " + h.dbColPrefix + "_id"
-	return s
+func (h *Helper) GetQueryInsert() string {
+	return h.queryInsert
 }
 
 // GetQueryUpdateById returns update query
-func (h *Helper) GetQueryUpdateById(fields []string) string {
-	if len(fields) == 0 {
-		return h.queryUpdateById
-	}
-
-	s := "UPDATE " + h.dbTbl + " SET "
-	qCols, cnt, _, qColVals := h.getColsCommaSeparated(fields)
-	if qCols == "" {
-		return h.queryUpdateById
-	}
-	s += qColVals + " WHERE " + h.dbColPrefix + "_id = $" + strconv.Itoa(cnt+1)
-	return s
+func (h *Helper) GetQueryUpdateById() string {
+	return h.queryUpdateById
 }
 
 // GetQuerySelectById returns select query
-func (h *Helper) GetQuerySelectById(fields []string) string {
-	if len(fields) == 0 {
-		return h.querySelectById
-	}
-	s := "SELECT "
-	qCols, _, _, _ := h.getColsCommaSeparated(fields)
-	if qCols == "" {
-		return h.querySelectById
-	}
-	s += qCols + " FROM " + h.dbTbl + " WHERE " + h.dbColPrefix + "_id = $1"
-	return s
+func (h *Helper) GetQuerySelectById() string {
+	return h.querySelectById
 }
 
 // GetQueryDeleteById returns delete query
@@ -136,17 +101,8 @@ func (h *Helper) GetQueryDeleteById() string {
 	return h.queryDeleteById
 }
 
-func (h *Helper) GetQuerySelect(fields []string, order []string, limit int, offset int, filters map[string]interface{}, orderFieldsToInclude map[string]bool, filterFieldsToInclude map[string]bool) string {
+func (h *Helper) GetQuerySelect(order []string, limit int, offset int, filters map[string]interface{}, orderFieldsToInclude map[string]bool, filterFieldsToInclude map[string]bool) string {
 	s := h.querySelectPrefix
-	if len(fields) > 0 {
-		s = "SELECT "
-		qCols, _, _, _ := h.getColsCommaSeparated(fields)
-		if qCols == "" {
-			s = h.querySelectPrefix
-		} else {
-			s += qCols + " FROM " + h.dbTbl
-		}
-	}
 
 	qOrder := ""
 	if order != nil && len(order) > 0 {
@@ -235,7 +191,6 @@ func (h *Helper) getColsCommaSeparated(fields []string) (string, int, string, st
 func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
 	h.reflectStructForValidation(u)
 	h.reflectStructForDBQueries(u, dbTablePrefix)
-	h.reflectStructForHTTP(u)
 }
 
 func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) {
@@ -348,23 +303,6 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 	}
 }
 
-func (h *Helper) reflectStructForHTTP(u interface{}) {
-	v := reflect.ValueOf(u)
-	i := reflect.Indirect(v)
-	s := i.Type()
-
-	for j := 0; j < s.NumField(); j++ {
-		field := s.Field(j)
-		if field.Type.Kind() != reflect.Int64 && field.Type.Kind() != reflect.String && field.Type.Kind() != reflect.Int {
-			continue
-		}
-		h.setFieldHTTPFromTag(field.Tag.Get("http"), j, field.Name)
-		if field.Name == "ID" {
-			h.setHTTPFromTag(field.Tag.Get("http_endpoint"))
-		}
-	}
-}
-
 func (h *Helper) setFieldFromName(fieldName string) {
 	if strings.HasSuffix(fieldName, "Email") {
 		h.fieldsEmail[fieldName] = true
@@ -433,67 +371,6 @@ func (h *Helper) setFieldFromTagOptWithVal(opt string, fieldIdx int, fieldName s
 		}
 	}
 	return nil
-}
-
-func (h *Helper) setFieldHTTPFromTag(tag string, fieldIdx int, fieldName string) {
-	opts := strings.SplitN(tag, " ", -1)
-	if len(opts) > 0 {
-		for _, v := range opts {
-			if v == "nocreate" {
-				if h.fieldsFlags[fieldName]&HTTPNoCreate == 0 {
-					h.fieldsFlags[fieldName] += HTTPNoCreate
-				}
-			}
-			if v == "noread" {
-				if h.fieldsFlags[fieldName]&HTTPNoRead == 0 {
-					h.fieldsFlags[fieldName] += HTTPNoRead
-				}
-			}
-			if v == "noupdate" {
-				if h.fieldsFlags[fieldName]&HTTPNoUpdate == 0 {
-					h.fieldsFlags[fieldName] += HTTPNoUpdate
-				}
-			}
-			if v == "nolist" {
-				if h.fieldsFlags[fieldName]&HTTPNoList == 0 {
-					h.fieldsFlags[fieldName] += HTTPNoList
-				}
-			}
-		}
-	}
-}
-
-func (h *Helper) setHTTPFromTag(tag string) {
-	opts := strings.SplitN(tag, " ", -1)
-	if len(opts) > 0 {
-		for _, v := range opts {
-			if v == "nocreate" {
-				if h.httpFlags&HTTPNoCreate == 0 {
-					h.httpFlags += HTTPNoCreate
-				}
-			}
-			if v == "noread" {
-				if h.httpFlags&HTTPNoRead == 0 {
-					h.httpFlags += HTTPNoRead
-				}
-			}
-			if v == "noupdate" {
-				if h.httpFlags&HTTPNoUpdate == 0 {
-					h.httpFlags += HTTPNoUpdate
-				}
-			}
-			if v == "nodelete" {
-				if h.httpFlags&HTTPNoDelete == 0 {
-					h.httpFlags += HTTPNoDelete
-				}
-			}
-			if v == "nolist" {
-				if h.httpFlags&HTTPNoList == 0 {
-					h.httpFlags += HTTPNoList
-				}
-			}
-		}
-	}
 }
 
 func (h *Helper) getDBCol(n string) string {
@@ -580,75 +457,4 @@ func (h *Helper) getPluralName(s string) string {
 		return s + "es"
 	}
 	return s + "s"
-}
-
-func (h *Helper) parseTag(s string) (bool, int, int, bool, int, int, string, *HelperError) {
-	xt := strings.SplitN(s, " ", -1)
-	xb := map[string]bool{
-		"req":   false,
-		"email": false,
-	}
-	xi := map[string]int{
-		"lenmin": -1,
-		"lenmax": -1,
-		"valmin": -1,
-		"valmax": -1,
-	}
-	xs := map[string]string{
-		"regexp": "",
-	}
-	var helperError *HelperError
-
-	if len(xt) < 1 {
-		return xb["req"], xi["lenmin"], xi["lenmax"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
-	}
-
-	for _, t := range xt {
-		if helperError != nil {
-			break
-		}
-
-		if t == "req" || t == "email" {
-			xb[t] = true
-		}
-
-		for _, sl := range []string{"lenmin", "lenmax", "valmin", "valmax", "regexp", "link:"} {
-			if helperError != nil {
-				break
-			}
-			if strings.HasPrefix(t, sl+":") {
-				lStr := strings.Replace(t, sl+":", "", 1)
-				if sl == "regexp" {
-					xs["regexp"] = lStr
-				} else {
-					i, err := strconv.Atoi(lStr)
-					if err != nil {
-						helperError = &HelperError{
-							Op:  "ParseTag",
-							Tag: sl,
-							Err: fmt.Errorf("strconv.Atoi failed: %w", err),
-						}
-						break
-					} else {
-						xi[sl] = i
-					}
-				}
-			}
-		}
-	}
-
-	return xb["req"], xi["lenmin"], xi["lenmax"], xb["email"], xi["valmin"], xi["valmax"], xs["regexp"], helperError
-}
-
-func (h *Helper) getFieldsWithoutHTTPFlag(flag int, skipID bool) []string {
-	xs := []string{}
-	for _, field := range h.fields {
-		if field == "ID" && skipID == true {
-			continue
-		}
-		if h.fieldsFlags[field] & flag == 0 {
-			xs = append(xs, field)
-		}
-	}
-	return xs
 }

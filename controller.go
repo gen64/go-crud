@@ -108,10 +108,6 @@ func (c Controller) DropDBTable(obj interface{}) *ControllerError {
 // execute an "UPDATE" query. Otherwise it will be "INSERT". After inserting,
 // new record ID is set to struct's ID field
 func (c Controller) SaveToDB(obj interface{}) *ControllerError {
-	return c.SaveToDBWithFields(obj, []string{})
-}
-
-func (c Controller) SaveToDBWithFields(obj interface{}, fields []string) *ControllerError {
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
@@ -125,18 +121,11 @@ func (c Controller) SaveToDBWithFields(obj interface{}, fields []string) *Contro
 		}
 	}
 
-	fieldsToInclude := make(map[string]bool)
-	if len(fields) > 0 {
-		for _, field := range fields {
-			fieldsToInclude[field] = true
-		}
-	}
-
 	var err3 error
 	if c.GetModelIDValue(obj) != 0 {
-		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById(fields), append(c.GetModelFieldInterfaces(fieldsToInclude, obj), c.GetModelIDInterface(obj))...)
+		_, err3 = c.dbConn.Exec(h.GetQueryUpdateById(), append(c.GetModelFieldInterfaces(obj), c.GetModelIDInterface(obj))...)
 	} else {
-		err3 = c.dbConn.QueryRow(h.GetQueryInsert(fields), c.GetModelFieldInterfaces(fieldsToInclude, obj)...).Scan(c.GetModelIDInterface(obj))
+		err3 = c.dbConn.QueryRow(h.GetQueryInsert(), c.GetModelFieldInterfaces(obj)...).Scan(c.GetModelIDInterface(obj))
 	}
 	if err3 != nil {
 		return &ControllerError{
@@ -164,8 +153,7 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 		return err2
 	}
 
-	fieldsToInclude := make(map[string]bool)
-	err3 := c.dbConn.QueryRow(h.GetQuerySelectById([]string{}), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(fieldsToInclude, obj)...)...)
+	err3 := c.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(obj)...)...)
 	switch {
 	case err3 == sql.ErrNoRows:
 		c.ResetFields(obj)
@@ -206,10 +194,6 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 // GetFromDB runs a select query on the database with specified filters, order,
 // limit and offset and returns a list of objects
 func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
-	return c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, []string{})
-}
-
-func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}, fields []string) ([]interface{}, *ControllerError) {
 	obj := newObjFunc()
 	h, err := c.getHelper(obj)
 	if err != nil {
@@ -224,15 +208,8 @@ func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []s
 		}
 	}
 
-	fieldsToInclude := make(map[string]bool)
-	if len(fields) > 0 {
-		for _, field := range fields {
-			fieldsToInclude[field] = true
-		}
-	}
-
 	var v []interface{}
-	rows, err2 := c.dbConn.Query(h.GetQuerySelect(fields, order, limit, offset, filters, fieldsToInclude, fieldsToInclude), c.GetFiltersInterfaces(fieldsToInclude, filters)...)
+	rows, err2 := c.dbConn.Query(h.GetQuerySelect(order, limit, offset, filters, nil, nil), c.GetFiltersInterfaces(filters)...)
 	if err2 != nil {
 		return nil, &ControllerError{
 			Op:  "DBQuery",
@@ -243,7 +220,7 @@ func (c Controller) GetFromDBWithFields(newObjFunc func() interface{}, order []s
 
 	for rows.Next() {
 			newObj := newObjFunc()
-			err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(fieldsToInclude, newObj)...)...)
+			err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(newObj)...)...)
 			if err3 != nil {
 				return nil, &ControllerError{
 					Op:  "DBQueryRowsScan",
@@ -267,18 +244,13 @@ func (c *Controller) GetModelIDValue(obj interface{}) int64 {
 
 // GetModelFieldInterfaces returns list of interfaces to object's fields without
 // the ID field
-func (c Controller) GetModelFieldInterfaces(fieldsToInclude map[string]bool, obj interface{}) []interface{} {
+func (c Controller) GetModelFieldInterfaces(obj interface{}) []interface{} {
 	val := reflect.ValueOf(obj).Elem()
-	s := reflect.Indirect(val).Type()
 
 	var v []interface{}
 	for i := 1; i < val.NumField(); i++ {
 		valueField := val.Field(i)
-		field := s.Field(i)
 		if valueField.Kind() != reflect.Int64 && valueField.Kind() != reflect.Int && valueField.Kind() != reflect.String {
-			continue
-		}
-		if len(fieldsToInclude) > 0 && fieldsToInclude[field.Name] != true {
 			continue
 		}
 		v = append(v, valueField.Addr().Interface())
@@ -288,15 +260,12 @@ func (c Controller) GetModelFieldInterfaces(fieldsToInclude map[string]bool, obj
 
 // GetFiltersInterfaces returns list of interfaces from filters map (used in
 // querying)
-func (c Controller) GetFiltersInterfaces(fieldsToInclude map[string]bool, mf map[string]interface{}) []interface{} {
+func (c Controller) GetFiltersInterfaces(mf map[string]interface{}) []interface{} {
 	var xi []interface{}
 
 	if mf != nil && len(mf) > 0 {
 		sorted := []string{}
 		for k, _ := range mf {
-			if len(fieldsToInclude) > 0 && fieldsToInclude[k] != true {
-				continue
-			}
 			sorted = append(sorted, k)
 		}
 		sort.Strings(sorted)
@@ -335,85 +304,38 @@ func (c Controller) ResetFields(obj interface{}) {
 // attached to.
 func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) func(http.ResponseWriter, *http.Request) {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		obj := newObjFunc()
-		h, err := c.getHelper(obj)
-		if err != nil {
-			return
-		}
-
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
 		}
 
 		// Create item
-		if r.Method == http.MethodPut && id == "" && h.GetHTTPFlags() & HTTPNoCreate == 0 {
-			c.handleHTTPPut(w, r, newObjFunc, id, []string{})
+		if r.Method == http.MethodPut {
+			c.handleHTTPPut(w, r, newObjFunc, id)
 			return
 		}
 
 		// Update item
-		if r.Method == http.MethodPut && id != "" && h.GetHTTPFlags() & HTTPNoUpdate == 0 {
-			c.handleHTTPPut(w, r, newObjFunc, id, []string{})
+		if r.Method == http.MethodPut {
+			c.handleHTTPPut(w, r, newObjFunc, id)
 			return
 		}
 
 		// Read item
-		if r.Method == http.MethodGet && id != "" && h.GetHTTPFlags() & HTTPNoRead == 0 {
-			c.handleHTTPGet(w, r, newObjFunc, id, []string{})
+		if r.Method == http.MethodGet {
+			c.handleHTTPGet(w, r, newObjFunc, id)
 			return
 		}
 
 		// List item
-		if r.Method == http.MethodGet && id == "" && h.GetHTTPFlags() & HTTPNoList == 0 {
-			c.handleHTTPGet(w, r, newObjFunc, id, []string{})
+		if r.Method == http.MethodGet {
+			c.handleHTTPGet(w, r, newObjFunc, id)
 			return
 		}
 
 		// Delete item
-		if r.Method == http.MethodDelete && h.GetHTTPFlags() & HTTPNoDelete == 0 {
+		if r.Method == http.MethodDelete {
 			c.handleHTTPDelete(w, r, newObjFunc, id)
-			return
-		}
-
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	return fn
-}
-
-// GetCustomHTTPHandler returns a CRUD HTTP handler that can be attached to HTTP
-// server. It creates a CRUD endpoint that allows operations defined with ops
-// argument.
-// It's important to pass "uri" argument same as the one that the handler is
-// attached to.
-func (c Controller) GetCustomHTTPHandler(newObjFunc func() interface{}, uri string, ops int, fields []string) func(http.ResponseWriter, *http.Request) {
-	fn := func(w http.ResponseWriter, r *http.Request) {
-		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
-		if !b {
-			return
-		}
-
-		// Create item
-		if r.Method == http.MethodPut && ops & OpCreate > 0 && id == "" {
-			c.handleHTTPPut(w, r, newObjFunc, id, fields)
-			return
-		}
-
-		// Update item
-		if r.Method == http.MethodPut && ops & OpUpdate > 0 && id != "" {
-			c.handleHTTPPut(w, r, newObjFunc, id, fields)
-			return
-		}
-
-		// Read one item
-		if r.Method == http.MethodGet && ops & OpRead > 0 && id != "" {
-			c.handleHTTPGet(w, r, newObjFunc, id, fields)
-			return
-		}
-		// List
-		if r.Method == http.MethodGet && ops & OpList > 0 && id == "" {
-			c.handleHTTPGet(w, r, newObjFunc, id, fields)
 			return
 		}
 
@@ -583,7 +505,7 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
 	return c.modelHelpers[n], nil
 }
 
-func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string, fields []string) {
+func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -591,19 +513,6 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 	}
 
 	objClone := newObjFunc()
-
-	if len(fields) == 0 {
-		h, err := c.getHelper(objClone)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if id != "" {
-			fields = h.getFieldsWithoutHTTPFlag(HTTPNoUpdate, true)
-		} else {
-			fields = h.getFieldsWithoutHTTPFlag(HTTPNoCreate, true)
-		}
-	}
 
 	if id != "" {
 		err2 := c.SetFromDB(objClone, id)
@@ -632,7 +541,7 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 		return
 	}
 
-	err2 := c.SaveToDBWithFields(objClone, fields)
+	err2 := c.SaveToDB(objClone)
 	if err2 != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -643,21 +552,7 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 	return
 }
 
-func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string, fields []string) {
-	if len(fields) == 0 {
-		obj := newObjFunc()
-		h, err := c.getHelper(obj)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		if id != "" {
-			fields = h.getFieldsWithoutHTTPFlag(HTTPNoRead, false)
-		} else {
-			fields = h.getFieldsWithoutHTTPFlag(HTTPNoList, false)
-		}
-	}
-
+func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	if id == "" {
 		obj := newObjFunc()
 		params := c.getParamsFromURI(r.RequestURI)
@@ -696,7 +591,7 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 				}
 			}
 		}
-		xobj, err1 := c.GetFromDBWithFields(newObjFunc, order, limit, offset, filters, fields)
+		xobj, err1 := c.GetFromDB(newObjFunc, order, limit, offset, filters)
 		if err1 != nil {
 			if err1.Op == "ValidateFilters" {
 				w.WriteHeader(http.StatusBadRequest)
