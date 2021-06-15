@@ -102,13 +102,52 @@ err = c.DropDBTable(user) // Run 'DROP TABLE'
 
 ### HTTP Endpoints
 With `go-crud`, HTTP endpoints can be created to manage objects stored in the
-database. See below example that returns HTTP Handler func which can be 
-attached to Golang's HTTP server.
+database.
+
+If User struct is used for HTTP endpoint, fields such as `Password` will be
+present when listing users. Therefore, it's necessary to create new
+structs to define CRUD endpoints' input and/or output. These structs should
+start with `User_` so that `go-crud` knows its validation is already defined
+within `User` struct (which is the main complete object).
+
+In below example, `User_Create` defines input fields when creating a User,
+`User_Update` defines fields that are meant to change when permorming update,
+`User_UpdatePassword` is an additional struct just for updating User password,
+and finally - fields in `User_List` will be visible when listing users or
+reading one user. (You can define these as you like).
+```
+type User_Create {
+	ID       int    `json:"user_id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+type User_Update {
+	ID       int    `json:"user_id"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+}
+type User_UpdatePassword {
+	ID       int `json:"user_id"`
+	Password string `json:"password"`
+}
+type User_List {
+	ID       int    `json:"user_id"`
+	Name     string `json:"name"
+}
+```
 
 ```
-http.HandleFunc("/users/", c.GetHTTPHandler(func() interface{} {
-	return &User{}
-}, "/users/"))
+var parentFunc = func() interface{} { return &User; }
+var createFunc = func() interface{} { return &User_Create; }
+var readFunc   = func() interface{} { return &User_List; }
+var updateFunc = func() interface{} { return &User_Update; }
+var listFunc   = func() interface{} { return &User_List; }
+
+var updatePasswordFunc = func() interface{} { return &User_UpdatePassword; }
+
+http.HandleFunc("/users/", c.GetHTTPHandler("/users/", parentFunc, createFunc, readFunc, updateFunc, parentFunc, listFunc))
+http.HandleFunc("/users/password/", c.GetHTTPHandler("/users/password/", parentFunc, nil, nil, updatePasswordFunc, nil, nil))
 log.Fatal(http.ListenAndServe(":9001", nil))
 ```
 
@@ -120,43 +159,15 @@ In the example, `/users/` CRUDL endpoint is created and it allows to:
 * get list of Users with making GET request to `/users/` with optional query parameters such as `limit`, `offset` to slice the returned list and `filter_` params (eg. `filter_email`) to filter out records with by specific fields
 
 When creating or updating an object, JSON payload with object details is
-required, as on the example below:
+required. It should match the struct used for Create and Update operations.
+In this case, `User_Create` and `User_Update`.
+
 ```
 {
 	"email": "test@example.com",
 	"name": "Nicholas",
-	"created_at": "1610356241",
 	...
 }
 ```
 
 Output from the endpoint is in JSON format as well.
-
-#### Custom HTTP Endpoints
-It's possible to create custom CRUD endpoints that will operate only on 
-specific model fields. For example, you might create endpoint that lists Users
-but shows only it's ID and Name, or an endpoint that updates only User
-password. Check below code.
-```
-// List users
-http.HandleFunc("/users/list_emails/", c.GetCustomHTTPHandler(func() interface{} {
-	return &User{}
-}, "/users/shortlist/", crud.OpList, []string{"Email"}))
-
-// Allow to update only the Password field
-http.HandleFunc("/users/update_password/", c.GetCustomHTTPHandler(func() interface{} {
-	return &User{}
-}, "/users/password/", crud.OpUpdate, []string{"Password"}))
-
-// Allow to create new User (only with Email and Name fields), and to read one
-// element via /users/create_and_read/:id - which will return Email and Name only
-http.HandleFunc("/users/create_and_read/", c.GetCustomHTTPHandler(func() interface{} {
-	return &User{}
-}, "/users/create/", crud.OpCreate | crud.OpRead, []string{"Email", "Name"}) 
-```
-
-Delete is unavailable with custom HTTP endpoints.
-
-## Refactoring Plan
-* comment out all the controller tests first, we'll focus on the helper first
-* go through helper
