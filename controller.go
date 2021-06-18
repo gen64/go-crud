@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -338,7 +337,6 @@ func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, ne
 // Validate checks object's fields. It returns result of validation as
 // a bool and list of fields with invalid value
 func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (bool, []string, error) {
-	return true, []string{}, nil
 	failedFields := []string{}
 	b := true
 
@@ -349,19 +347,15 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 
 	val := reflect.ValueOf(obj).Elem()
 
-	// TODO: Shorten below code
+	// Check required fields only when we are not validating filters
 	if filters == nil {
 		for k := range h.fieldsRequired {
 			valueField := val.FieldByName(k)
-			if valueField.Type().Name() == "string" && valueField.String() == "" {
-				failedFields = append(failedFields, k)
-				b = false
+			canBeZero := false
+			if len(h.fieldsValueNotNil[k]) == 2 && (h.fieldsValueNotNil[k][0] || h.fieldsValueNotNil[k][1]) {
+				canBeZero = true
 			}
-			if valueField.Type().Name() == "int" && valueField.Int() == 0 {
-				failedFields = append(failedFields, k)
-				b = false
-			}
-			if valueField.Type().Name() == "int64" && valueField.Int() == 0 {
+			if !c.validateFieldRequired(valueField, canBeZero) {
 				failedFields = append(failedFields, k)
 				b = false
 			}
@@ -371,25 +365,17 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 		if filters != nil && !c.isKeyInMap(k, filters) {
 			continue
 		}
-		var valueField reflect.Value
-		if filters != nil {
-			valueField = reflect.ValueOf(filters[k])
-			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
-				failedFields = append(failedFields, k)
-				b = false
-				continue
-			}
-		} else {
-			valueField = val.FieldByName(k)
-		}
-		if valueField.Type().Name() != "string" {
-			continue
-		}
-		if v[0] > -1 && len(valueField.String()) < v[0] {
+		if filters != nil && reflect.ValueOf(filters[k]).Type().Name() != val.FieldByName(k).Type().Name() {
 			failedFields = append(failedFields, k)
 			b = false
 		}
-		if v[1] > -1 && len(valueField.String()) > v[1] {
+		var valueField reflect.Value
+		if filters != nil {
+			valueField = reflect.ValueOf(filters[k])
+		} else {
+			valueField = val.FieldByName(k)
+		}
+		if !c.validateFieldLength(valueField, v) {
 			failedFields = append(failedFields, k)
 			b = false
 		}
@@ -398,49 +384,43 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 		if filters != nil && !c.isKeyInMap(k, filters) {
 			continue
 		}
+		if filters != nil && reflect.ValueOf(filters[k]).Type().Name() != val.FieldByName(k).Type().Name() {
+			failedFields = append(failedFields, k)
+			b = false
+		}
 		var valueField reflect.Value
 		if filters != nil {
 			valueField = reflect.ValueOf(filters[k])
-			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
-				failedFields = append(failedFields, k)
-				b = false
-				continue
-			}
 		} else {
 			valueField = val.FieldByName(k)
 		}
-		if valueField.Type().Name() != "int" && valueField.Type().Name() != "int64" {
-			continue
+		minIsZero := false
+		maxIsZero := false
+		if len(h.fieldsValueNotNil[k]) == 2 {
+			minIsZero = h.fieldsValueNotNil[k][0]
+			maxIsZero = h.fieldsValueNotNil[k][1]
 		}
-		if v[0] > -1 && valueField.Int() < int64(v[0]) {
+		if !c.validateFieldValue(valueField, v, minIsZero, maxIsZero) {
 			failedFields = append(failedFields, k)
 			b = false
 		}
-		if v[1] > -1 && valueField.Int() > int64(v[1]) {
-			failedFields = append(failedFields, k)
-			b = false
-		}
+
 	}
 	for k := range h.fieldsEmail {
 		if filters != nil && !c.isKeyInMap(k, filters) {
 			continue
 		}
+		if filters != nil && reflect.ValueOf(filters[k]).Type().Name() != val.FieldByName(k).Type().Name() {
+			failedFields = append(failedFields, k)
+			b = false
+		}
 		var valueField reflect.Value
 		if filters != nil {
 			valueField = reflect.ValueOf(filters[k])
-			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
-				failedFields = append(failedFields, k)
-				b = false
-				continue
-			}
 		} else {
 			valueField = val.FieldByName(k)
 		}
-		if valueField.Type().Name() != "string" {
-			continue
-		}
-		var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-		if !emailRegex.MatchString(valueField.String()) {
+		if !c.validateFieldEmail(valueField) {
 			failedFields = append(failedFields, k)
 			b = false
 		}
@@ -449,26 +429,88 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 		if filters != nil && !c.isKeyInMap(k, filters) {
 			continue
 		}
+		if filters != nil && reflect.ValueOf(filters[k]).Type().Name() != val.FieldByName(k).Type().Name() {
+			failedFields = append(failedFields, k)
+			b = false
+		}
 		var valueField reflect.Value
 		if filters != nil {
 			valueField = reflect.ValueOf(filters[k])
-			if valueField.Type().Name() != val.FieldByName(k).Type().Name() {
-				failedFields = append(failedFields, k)
-				b = false
-				continue
-			}
 		} else {
 			valueField = val.FieldByName(k)
 		}
-		if valueField.Type().Name() != "string" {
-			continue
-		}
-		if !v.MatchString(valueField.String()) {
+		if !c.validateFieldRegExp(valueField, v) {
 			failedFields = append(failedFields, k)
 			b = false
 		}
 	}
+	//log.Print(h.dbFieldCols)
+	//log.Print(failedFields)
 	return b, failedFields, nil
+}
+
+// validateFieldRequired checks if field that is required has a value
+func (c *Controller) validateFieldRequired(valueField reflect.Value, canBeZero bool) bool {
+	if valueField.Type().Name() == "string" && valueField.String() == "" {
+		return false
+	}
+	if valueField.Type().Name() == "int" && valueField.Int() == 0 && !canBeZero {
+		return false
+	}
+	if valueField.Type().Name() == "int64" && valueField.Int() == 0 && !canBeZero {
+		return false
+	}
+	return true
+}
+
+// validateFieldLength checks string field's length
+func (c *Controller) validateFieldLength(valueField reflect.Value, length [2]int) bool {
+	if valueField.Type().Name() != "string" {
+		return true
+	}
+	if length[0] > -1 && len(valueField.String()) < length[0] {
+		return false
+	}
+	if length[1] > -1 && len(valueField.String()) > length[1] {
+		return false
+	}
+	return true
+}
+
+// validateFieldValue checks int field's value
+func (c *Controller) validateFieldValue(valueField reflect.Value, value [2]int, minIsZero bool, maxIsZero bool) bool {
+	if valueField.Type().Name() != "int" && valueField.Type().Name() != "int64" {
+		return true
+	}
+	// Minimal value is 0 only when canBeZero is true; otherwise it's not defined
+	if ((minIsZero && value[0] == 0) || value[0] != 0) && valueField.Int() < int64(value[0]) {
+		return false
+	}
+	// Maximal value is 0 only when canBeZero is true; otherwise it's not defined
+	if ((maxIsZero && value[1] == 0) || value[1] != 0) && valueField.Int() > int64(value[1]) {
+		return false
+	}
+	return true
+}
+
+// validateFieldEmail checks if email field has a valid value
+func (c *Controller) validateFieldEmail(valueField reflect.Value) bool {
+	if valueField.Type().Name() != "string" {
+		return true
+	}
+	var emailRegex = regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+	return emailRegex.MatchString(valueField.String())
+}
+
+// validateFieldRegExp checks if string field's value matches the regular expression
+func (c *Controller) validateFieldRegExp(valueField reflect.Value, re *regexp.Regexp) bool {
+	if valueField.Type().Name() != "string" {
+		return true
+	}
+	if !re.MatchString(valueField.String()) {
+		return false
+	}
+	return true
 }
 
 // initHelpers creates all the Helper objects. For HTTP endpoints, it is
@@ -526,7 +568,6 @@ func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string,
 			Err: h.Err(),
 		}
 	}
-	log.Print(h)
 	c.modelHelpers[n] = h
 	return nil
 }

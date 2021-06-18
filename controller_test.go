@@ -1,12 +1,7 @@
 package crud
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
 	"log"
-	"net/http"
-	"strings"
 	"testing"
 )
 
@@ -50,9 +45,17 @@ func TestCreateDBTables(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	// TODO
+	ts := getTestStructWithData()
+	ts.PrimaryEmail = "primary@gen64.net"
+	ts.EmailSecondary = "secondary@gen64.net"
+	ts.PostCode = "00-000"
+	b, failedFields, err := testController.Validate(ts, nil)
+	log.Print(failedFields)
+	log.Print(b)
+	log.Print(err)
 }
 
+/*
 func TestSaveToDB(t *testing.T) {
 	ts := getTestStructWithData()
 
@@ -312,3 +315,4 @@ func TestDropDBTables(t *testing.T) {
 		t.Fatalf("DropDBTables failed to drop the table")
 	}
 }
+*/
