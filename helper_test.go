@@ -5,7 +5,7 @@ import (
 )
 
 func TestSQLQueries(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS test_structs"
@@ -21,7 +21,7 @@ func TestSQLQueries(t *testing.T) {
 }
 
 func TestSQLInsertQueries(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.GetQueryInsert()
 	want := "INSERT INTO test_structs(test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING test_struct_id"
@@ -31,7 +31,7 @@ func TestSQLInsertQueries(t *testing.T) {
 }
 
 func TestSQLUpdateQueries(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.GetQueryUpdateById()
 	want := "UPDATE test_structs SET test_struct_flags=$1,primary_email=$2,email_secondary=$3,first_name=$4,last_name=$5,age=$6,price=$7,post_code=$8,post_code2=$9,password=$10,created_by_user_id=$11,key=$12 WHERE test_struct_id = $13"
@@ -41,7 +41,7 @@ func TestSQLUpdateQueries(t *testing.T) {
 }
 
 func TestSQLDeleteQueries(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.GetQueryDeleteById()
 	want := "DELETE FROM test_structs WHERE test_struct_id = $1"
@@ -51,7 +51,7 @@ func TestSQLDeleteQueries(t *testing.T) {
 }
 
 func TestSQLSelectQueries(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.GetQuerySelectById()
 	want := "SELECT test_struct_id,test_struct_flags,primary_email,email_secondary,first_name,last_name,age,price,post_code,post_code2,password,created_by_user_id,key FROM test_structs WHERE test_struct_id = $1"
@@ -90,10 +90,10 @@ func TestPluralName(t *testing.T) {
 	type ProductCategory struct{}
 	type UserCart struct{}
 
-	h1 := NewHelper(&Category{}, "")
-	h2 := NewHelper(&Cross{}, "")
-	h3 := NewHelper(&ProductCategory{}, "")
-	h4 := NewHelper(&UserCart{}, "")
+	h1 := NewHelper(&Category{}, "", "", nil)
+	h2 := NewHelper(&Cross{}, "", "", nil)
+	h3 := NewHelper(&ProductCategory{}, "", "", nil)
+	h4 := NewHelper(&UserCart{}, "", "", nil)
 
 	got := h1.GetQueryDropTable()
 	want := "DROP TABLE IF EXISTS categories"
@@ -121,21 +121,21 @@ func TestPluralName(t *testing.T) {
 }
 
 func TestValidationFields(t *testing.T) {
-	h := NewHelper(testStructObj, "")
+	h := NewHelper(testStructObj, "", "", nil)
 
 	got := h.fieldsRequired
 	want := map[string]bool{"PrimaryEmail": true, "EmailSecondary": true, "FirstName": true, "LastName": true, "Age": true, "PostCode": true, "Key": true}
 	if len(got) != len(want) {
 		t.Fatalf("Required fields: want %v, got %v", len(want), len(got))
 	}
-	for i, _ := range got {
+	for i := range got {
 		if got[i] != want[i] {
 			t.Fatalf("Required fields: want %v, got %v", want[i], got[i])
 		}
 	}
 
 	got2 := h.fieldsLength
-	want2 := map[string][2]int{"FirstName": [2]int{2, 30}, "LastName": [2]int{0, 255}, "PostCode": [2]int{6, 0}, "PostCode2": [2]int{6, 0}, "Key": [2]int{30, 255}}
+	want2 := map[string][2]int{"FirstName": {2, 30}, "LastName": {0, 255}, "PostCode": {6, 0}, "PostCode2": {6, 0}, "Key": {30, 255}}
 	/*if len(got2) != len(want2) {
 		t.Fatalf("Field lengths: want %v, got %v", len(want2), len(got2))
 	}*/
@@ -155,14 +155,14 @@ func TestValidationFields(t *testing.T) {
 	if len(got3) != len(want3) {
 		t.Fatalf("Email fields: want %v, got %v", len(want3), len(got3))
 	}
-	for i, _ := range got3 {
+	for i := range got3 {
 		if got3[i] != want3[i] {
 			t.Fatalf("Email fields: want %v, got %v", want3[i], got3[i])
 		}
 	}
 
 	got4 := h.fieldsValue
-	want4 := map[string][2]int{"Age": [2]int{0, 120}, "Price": [2]int{0, 999}}
+	want4 := map[string][2]int{"Age": {0, 120}, "Price": {0, 999}}
 	/*if len(got4) != len(want4) {
 		t.Fatalf("Field values: want %v, got %v", len(want4), len(got4))
 	}*/
@@ -178,7 +178,7 @@ func TestValidationFields(t *testing.T) {
 	}
 
 	got5 := h.fieldsValueNotNil
-	want5 := map[string][2]bool{"Age": [2]bool{false, false}, "Price": [2]bool{true, false}}
+	want5 := map[string][2]bool{"Age": {false, false}, "Price": {true, false}}
 	/*if len(got5) != len(want5) {
 		t.Fatalf("Field value not nils: want %v, got %v", len(want5), len(got5))
 	}*/

@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -151,24 +152,15 @@ func TestGetFromDB(t *testing.T) {
 	}
 }
 
-
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
 	// TODO
 }
 
 func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	j := `{
-		"test_struct_flags": 4,
 		"email": "test@example.com",
-		"email2": "test2@example.com",
 		"first_name": "John",
 		"last_name": "Smith",
-		"age": 37,
-		"price": 1000,
-		"post_code": "66-112",
-		"post_code2": "11-111",
-		"password": "password123",
-		"created_by_user_id": 6,
 		"key": "uniquekey1"
 	}`
 	_ = makePUTInsertRequest(j, t)
@@ -177,10 +169,10 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT method failed to insert struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != 4 || primaryEmail != "test@example.com" || emailSecondary != "test2@example.com" || firstName != "John" || lastName != "Smith" || age != 37 || price != 1000 || postCode != "66-112" || postCode2 != "11-111" || createdByUserID != 6 || key != "uniquekey1" || password != "password123" {
+	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John" || lastName != "Smith" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "uniquekey1" || password != "" {
 		t.Fatalf("PUT method failed to insert struct to the table")
 	}
-	
+
 	// TODO: Check if response contains JSON with key 'id'
 }
 
@@ -205,8 +197,9 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT method failed to update struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != 8 || primaryEmail != "test11@example.com" || emailSecondary != "test22@example.com" || firstName != "John2" || lastName != "Smith2" || age != 39 || price != 1002 || postCode != "22-222" || postCode2 != "33-333" || createdByUserID != 12 || key != "uniquekey2" || password != "password123updated" {
-		t.Fatalf("PUT method failed to update struct to the table")
+	// Only 2 fields should be updated: FirstName and LastName. Check the TestStruct_Update struct
+	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John2" || lastName != "Smith2" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "uniquekey1" || password != "" {
+		t.Fatalf("PUT method failed to insert struct to the table")
 	}
 }
 
@@ -227,8 +220,14 @@ func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET method failed to return unmarshable JSON")
 	}
-	if ts.Age != 39 {
+	if ts.Age != 0 {
 		t.Fatalf("GET method returned invalid values")
+	}
+	if strings.Contains(string(body), "email2") {
+		t.Fatalf("GET method returned output with field that should have been hidden")
+	}
+	if strings.Contains(string(body), "post_code2") {
+		t.Fatalf("GET method returned output with field that should have been hidden")
 	}
 }
 
@@ -254,7 +253,7 @@ func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
 
 func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
-	for i:=1; i<=55; i++ {
+	for i := 1; i <= 55; i++ {
 		testController.ResetFields(ts)
 		ts.ID = 0
 		testController.SetFromDB(ts, fmt.Sprintf("%d", i))
@@ -264,20 +263,19 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 		}
 	}
 	b := makeGETListRequest(map[string]string{
-		"limit": "10",
-		"offset": "20",
-		"order": "age",
-		"order_direction": "asc",
-		"filter_price": "444",
+		"limit":                "10",
+		"offset":               "20",
+		"order":                "age",
+		"order_direction":      "asc",
+		"filter_price":         "444",
 		"filter_primary_email": "primary@gen64.net",
 	}, t)
 
-	o := struct{
+	o := struct {
 		Items []map[string]interface{} `json:"items"`
 	}{
 		Items: []map[string]interface{}{},
 	}
-
 	err := json.Unmarshal(b, &o)
 	if err != nil {
 		t.Fatalf("GET method returned wrong json output, error marshaling: %s", err.Error())
@@ -289,6 +287,13 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 
 	if o.Items[2]["age"].(float64) != 52 {
 		t.Fatalf("GET method returned invalid row, want %d got %f", 52, o.Items[2]["age"].(float64))
+	}
+
+	if strings.Contains(string(b), "email2") {
+		t.Fatalf("GET method returned output with field that should have been hidden")
+	}
+	if strings.Contains(string(b), "post_code2") {
+		t.Fatalf("GET method returned output with field that should have been hidden")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -35,6 +36,7 @@ func NewController(dbConn *sql.DB, tblPrefix string) *Controller {
 		dbConn:      dbConn,
 		dbTblPrefix: tblPrefix,
 	}
+	c.modelHelpers = make(map[string]*Helper)
 	return c
 }
 
@@ -152,7 +154,6 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 	if err2 != nil {
 		return err2
 	}
-
 	err3 := c.dbConn.QueryRow(h.GetQuerySelectById(), int64(idInt)).Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(obj)), c.GetModelFieldInterfaces(obj)...)...)
 	switch {
 	case err3 == sql.ErrNoRows:
@@ -166,7 +167,6 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 	default:
 		return nil
 	}
-	return nil
 }
 
 // DeleteFromDB removes object from the database table and it does that only
@@ -219,15 +219,15 @@ func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, lim
 	defer rows.Close()
 
 	for rows.Next() {
-			newObj := newObjFunc()
-			err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(newObj)...)...)
-			if err3 != nil {
-				return nil, &ControllerError{
-					Op:  "DBQueryRowsScan",
-					Err: err3,
-				}
+		newObj := newObjFunc()
+		err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(newObj)...)...)
+		if err3 != nil {
+			return nil, &ControllerError{
+				Op:  "DBQueryRowsScan",
+				Err: err3,
 			}
-			v = append(v, newObj)
+		}
+		v = append(v, newObj)
 	}
 	return v, nil
 }
@@ -263,9 +263,9 @@ func (c Controller) GetModelFieldInterfaces(obj interface{}) []interface{} {
 func (c Controller) GetFiltersInterfaces(mf map[string]interface{}) []interface{} {
 	var xi []interface{}
 
-	if mf != nil && len(mf) > 0 {
+	if len(mf) > 0 {
 		sorted := []string{}
-		for k, _ := range mf {
+		for k := range mf {
 			sorted = append(sorted, k)
 		}
 		sort.Strings(sorted)
@@ -298,49 +298,39 @@ func (c Controller) ResetFields(obj interface{}) {
 }
 
 // GetHTTPHandler returns a CRUD HTTP handler that can be attached to HTTP
-// server. It creates a CRUD endpoint for PUT, GET and DELETE methods. Listing
-// many records is not yet implemented.
+// server. It creates a CRUD endpoint for PUT, GET and DELETE methods.
 // It's important to pass "uri" argument same as the one that the handler is
 // attached to.
-func (c Controller) GetHTTPHandler(newObjFunc func() interface{}, uri string) func(http.ResponseWriter, *http.Request) {
+func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) func(http.ResponseWriter, *http.Request) {
+	c.initHelpersForHTTPHandler(newObjFunc, newObjCreateFunc, newObjReadFunc, newObjUpdateFunc, newObjDeleteFunc, newObjListFunc)
+
 	fn := func(w http.ResponseWriter, r *http.Request) {
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
 		}
-
-		// Create item
-		if r.Method == http.MethodPut {
-			c.handleHTTPPut(w, r, newObjFunc, id)
+		if r.Method == http.MethodPut && id == "" {
+			c.handleHTTPPut(w, r, newObjCreateFunc, id)
 			return
 		}
-
-		// Update item
-		if r.Method == http.MethodPut {
-			c.handleHTTPPut(w, r, newObjFunc, id)
+		if r.Method == http.MethodPut && id != "" {
+			c.handleHTTPPut(w, r, newObjUpdateFunc, id)
 			return
 		}
-
-		// Read item
-		if r.Method == http.MethodGet {
-			c.handleHTTPGet(w, r, newObjFunc, id)
+		if r.Method == http.MethodGet && id != "" {
+			c.handleHTTPGet(w, r, newObjReadFunc, id)
 			return
 		}
-
-		// List item
-		if r.Method == http.MethodGet {
-			c.handleHTTPGet(w, r, newObjFunc, id)
+		if r.Method == http.MethodGet && id == "" {
+			c.handleHTTPGet(w, r, newObjListFunc, id)
 			return
 		}
-
-		// Delete item
-		if r.Method == http.MethodDelete {
+		if r.Method == http.MethodDelete && id != "" {
 			c.handleHTTPDelete(w, r, newObjFunc, id)
 			return
 		}
 
 		w.WriteHeader(http.StatusBadRequest)
-		return
 	}
 	return fn
 }
@@ -361,7 +351,7 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 
 	// TODO: Shorten below code
 	if filters == nil {
-		for k, _ := range h.fieldsRequired {
+		for k := range h.fieldsRequired {
 			valueField := val.FieldByName(k)
 			if valueField.Type().Name() == "string" && valueField.String() == "" {
 				failedFields = append(failedFields, k)
@@ -431,7 +421,7 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 			b = false
 		}
 	}
-	for k, _ := range h.fieldsEmail {
+	for k := range h.fieldsEmail {
 		if filters != nil && !c.isKeyInMap(k, filters) {
 			continue
 		}
@@ -481,6 +471,66 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 	return b, failedFields, nil
 }
 
+// initHelpers creates all the Helper objects. For HTTP endpoints, it is
+// necessary to create these first
+func (c *Controller) initHelpersForHTTPHandler(newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) *ControllerError {
+	obj := newObjFunc()
+	v := reflect.ValueOf(obj)
+	i := reflect.Indirect(v)
+	s := i.Type()
+	forceName := s.Name()
+
+	h, cErr := c.getHelper(obj)
+	if cErr != nil {
+		return cErr
+	}
+
+	cErr = c.initHelper(newObjCreateFunc, forceName, h)
+	if cErr != nil {
+		return cErr
+	}
+	cErr = c.initHelper(newObjReadFunc, forceName, h)
+	if cErr != nil {
+		return cErr
+	}
+	cErr = c.initHelper(newObjUpdateFunc, forceName, h)
+	if cErr != nil {
+		return cErr
+	}
+	cErr = c.initHelper(newObjDeleteFunc, forceName, h)
+	if cErr != nil {
+		return cErr
+	}
+	cErr = c.initHelper(newObjListFunc, forceName, h)
+	if cErr != nil {
+		return cErr
+	}
+
+	return nil
+}
+
+func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string, sourceHelper *Helper) *ControllerError {
+	if newObjFunc == nil {
+		return nil
+	}
+
+	obj := newObjFunc()
+	v := reflect.ValueOf(obj)
+	i := reflect.Indirect(v)
+	s := i.Type()
+	n := s.Name()
+	h := NewHelper(obj, c.dbTblPrefix, forceName, sourceHelper)
+	if h.Err() != nil {
+		return &ControllerError{
+			Op:  "InitHelperWithForcedName",
+			Err: h.Err(),
+		}
+	}
+	log.Print(h)
+	c.modelHelpers[n] = h
+	return nil
+}
+
 // getHelper returns a special Helper instance which reflects the struct type
 // to get SQL queries, validation etc.
 func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
@@ -488,12 +538,8 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
 	i := reflect.Indirect(v)
 	s := i.Type()
 	n := s.Name()
-
-	if c.modelHelpers == nil {
-		c.modelHelpers = make(map[string]*Helper)
-	}
 	if c.modelHelpers[n] == nil {
-		h := NewHelper(obj, c.dbTblPrefix)
+		h := NewHelper(obj, c.dbTblPrefix, "", nil)
 		if h.Err() != nil {
 			return nil, &ControllerError{
 				Op:  "GetHelper",
@@ -549,7 +595,6 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(c.jsonID(c.GetModelIDValue(objClone)))
-	return
 }
 
 func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
@@ -635,7 +680,6 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 
 	w.WriteHeader(http.StatusOK)
 	w.Write(j)
-	return
 }
 
 func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
@@ -664,7 +708,6 @@ func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, new
 	}
 
 	w.WriteHeader(http.StatusOK)
-	return
 }
 
 func (c Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {

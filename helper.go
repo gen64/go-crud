@@ -41,10 +41,13 @@ type Helper struct {
 	fieldsRegExp       map[string]*regexp.Regexp
 	fieldsDefaultValue map[string]string
 	fieldsUniq         map[string]bool
+	fieldsTags         map[string]map[string]string
 
 	fieldsFlags map[string]int
 
 	flags int
+
+	defaultFieldsTags map[string]map[string]string
 
 	err *HelperError
 }
@@ -55,9 +58,10 @@ const TypeString = 256
 
 // NewHelper takes object and database table name prefix as arguments and
 // returns Helper instance
-func NewHelper(obj interface{}, dbTblPrefix string) *Helper {
+func NewHelper(obj interface{}, dbTblPrefix string, forceName string, sourceHelper *Helper) *Helper {
 	h := &Helper{}
-	h.reflectStruct(obj, dbTblPrefix)
+	h.setDefaultTags(sourceHelper)
+	h.reflectStruct(obj, dbTblPrefix, forceName)
 	return h
 }
 
@@ -105,12 +109,12 @@ func (h *Helper) GetQuerySelect(order []string, limit int, offset int, filters m
 	s := h.querySelectPrefix
 
 	qOrder := ""
-	if order != nil && len(order) > 0 {
+	if len(order) > 0 {
 		for i := 0; i < len(order); i = i + 2 {
 			k := order[i]
 			v := order[i+1]
 
-			if orderFieldsToInclude != nil && len(orderFieldsToInclude) > 0 && orderFieldsToInclude[k] != true && orderFieldsToInclude[h.dbCols[k]] != true {
+			if len(orderFieldsToInclude) > 0 && !orderFieldsToInclude[k] && !orderFieldsToInclude[h.dbCols[k]] {
 				continue
 			}
 
@@ -141,13 +145,13 @@ func (h *Helper) GetQuerySelect(order []string, limit int, offset int, filters m
 
 	qWhere := ""
 	i := 1
-	if filters != nil && len(filters) > 0 {
+	if len(filters) > 0 {
 		sorted := []string{}
-		for k, _ := range filters {
+		for k := range filters {
 			if h.dbFieldCols[k] == "" {
 				continue
 			}
-			if filterFieldsToInclude != nil && len(filterFieldsToInclude) > 0 && filterFieldsToInclude[k] != true {
+			if len(filterFieldsToInclude) > 0 && !filterFieldsToInclude[k] {
 				continue
 			}
 			sorted = append(sorted, h.dbFieldCols[k])
@@ -171,6 +175,14 @@ func (h *Helper) GetQuerySelect(order []string, limit int, offset int, filters m
 	return s
 }
 
+func (h *Helper) setDefaultTags(src *Helper) {
+	if src != nil {
+		h.defaultFieldsTags = make(map[string]map[string]string)
+		h.defaultFieldsTags = src.getFieldsTags()
+	}
+}
+
+// TODO Is it used?
 func (h *Helper) getColsCommaSeparated(fields []string) (string, int, string, string) {
 	cols := ""
 	colCnt := 0
@@ -188,17 +200,24 @@ func (h *Helper) getColsCommaSeparated(fields []string) (string, int, string, st
 	return cols, colCnt, vals, colVals
 }
 
-func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string) {
-	h.reflectStructForValidation(u)
-	h.reflectStructForDBQueries(u, dbTablePrefix)
+func (h *Helper) getFieldsTags() map[string]map[string]string {
+	return h.fieldsTags
 }
 
-func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) {
+func (h *Helper) reflectStruct(u interface{}, dbTablePrefix string, forceName string) {
+	h.reflectStructForValidation(u)
+	h.reflectStructForDBQueries(u, dbTablePrefix, forceName)
+}
+
+func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string, forceName string) {
 	v := reflect.ValueOf(u)
 	i := reflect.Indirect(v)
 	s := i.Type()
 
 	usName := h.getUnderscoredName(s.Name())
+	if forceName != "" {
+		usName = h.getUnderscoredName(forceName)
+	}
 	usPluName := h.getPluralName(usName)
 	h.dbTbl = dbTablePrefix + usPluName
 	h.dbColPrefix = usName
@@ -235,7 +254,7 @@ func (h *Helper) reflectStructForDBQueries(u interface{}, dbTablePrefix string) 
 		h.dbFieldCols[field.Name] = dbCol
 		h.dbCols[dbCol] = field.Name
 		uniq := false
-		if h.fieldsUniq[field.Name] == true {
+		if h.fieldsUniq[field.Name] {
 			uniq = true
 		}
 		dbColParams := h.getDBColParams(field.Name, field.Type.String(), uniq)
@@ -276,6 +295,7 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 	h.fieldsFlags = make(map[string]int)
 	h.fieldsDefaultValue = make(map[string]string)
 	h.fieldsUniq = make(map[string]bool)
+	h.fieldsTags = make(map[string]map[string]string)
 
 	for j := 0; j < s.NumField(); j++ {
 		field := s.Field(j)
@@ -289,17 +309,37 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 		h.fieldsValue[field.Name] = [2]int{0, 0}
 		h.fieldsValueNotNil[field.Name] = [2]bool{false, false}
 
-		h.setFieldFromTag(field.Tag.Get("crud"), j, field.Name)
+		crudTag := field.Tag.Get("crud")
+		crudRegexpTag := field.Tag.Get("crud_regexp")
+		crudValTag := field.Tag.Get("crud_val")
+		if h.defaultFieldsTags != nil {
+			if crudTag == "" && h.defaultFieldsTags[field.Name]["crud"] != "" {
+				crudTag = h.defaultFieldsTags[field.Name]["crud"]
+			}
+			if crudRegexpTag == "" && h.defaultFieldsTags[field.Name]["crud_regexp"] != "" {
+				crudRegexpTag = h.defaultFieldsTags[field.Name]["crud_regexp"]
+			}
+			if crudValTag == "" && h.defaultFieldsTags[field.Name]["crud_val"] != "" {
+				crudValTag = h.defaultFieldsTags[field.Name]["crud_val"]
+			}
+		}
+
+		h.setFieldFromTag(crudTag, j, field.Name)
 		if h.err != nil {
 			return
 		}
 
-		if field.Tag.Get("crud_regexp") != "" {
-			h.fieldsRegExp[field.Name] = regexp.MustCompile(field.Tag.Get("crud_regexp"))
+		if crudRegexpTag != "" {
+			h.fieldsRegExp[field.Name] = regexp.MustCompile(crudRegexpTag)
 		}
-		if field.Tag.Get("crud_val") != "" {
-			h.fieldsDefaultValue[field.Name] = field.Tag.Get("crud_val")
+		if crudValTag != "" {
+			h.fieldsDefaultValue[field.Name] = crudValTag
 		}
+
+		h.fieldsTags[field.Name] = make(map[string]string)
+		h.fieldsTags[field.Name]["crud"] = field.Tag.Get("crud")
+		h.fieldsTags[field.Name]["crud_regexp"] = field.Tag.Get("crud_regexp")
+		h.fieldsTags[field.Name]["crud_val"] = field.Tag.Get("crud_val")
 	}
 }
 
@@ -427,6 +467,7 @@ func (h *Helper) addWithAnd(s string, v string) string {
 
 func (h *Helper) getUnderscoredName(s string) string {
 	o := ""
+
 	var prev rune
 	for i, ch := range s {
 		if i == 0 {

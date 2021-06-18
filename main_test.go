@@ -5,13 +5,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"testing"
 	"time"
-	"io/ioutil"
 
 	_ "github.com/lib/pq"
 	"github.com/ory/dockertest/v3"
@@ -29,10 +29,16 @@ var dockerResource *dockertest.Resource
 var httpPort = "32777"
 var httpCancelCtx context.CancelFunc
 var httpURI = "/v1/testobjects/"
+var httpURI2 = "/v1/testobjects/price/"
 
 var testController *Controller
 
 var testStructNewFunc func() interface{}
+var testStructCreateNewFunc func() interface{}
+var testStructReadNewFunc func() interface{}
+var testStructUpdateNewFunc func() interface{}
+var testStructListNewFunc func() interface{}
+var testStructUpdatePriceNewFunc func() interface{}
 var testStructObj *TestStruct
 
 // Test struct for all the tests
@@ -58,10 +64,48 @@ type TestStruct struct {
 
 	// Test HTTP endpoint tags
 	Password        string `json:"password"`
-	CreatedByUserID int64  `json:"created_by_user_id" crud:"nocreate" crud_val:55`
+	CreatedByUserID int64  `json:"created_by_user_id" crud_val:55`
 
 	// Test unique tag
 	Key string `json:"key" crud:"req uniq lenmin:30 lenmax:255"`
+}
+
+// Test structs for HTTP endpoints
+// Create
+type TestStruct_Create struct {
+	ID           int64  `json:"test_struct_id"`
+	PrimaryEmail string `json:"email"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Key          string `json:"key"`
+}
+
+type TestStruct_Update struct {
+	ID        int64  `json:"test_struct_id"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+type TestStruct_UpdatePrice struct {
+	ID    int64 `json:"test_struct_id"`
+	Price int   `json:"price"`
+}
+
+type TestStruct_Read struct {
+	ID           int64  `json:"test_struct_id"`
+	PrimaryEmail string `json:"email"`
+	FirstName    string `json:"first_name"`
+	LastName     string `json:"last_name"`
+	Age          int    `json:"age"`
+	Price        int    `json:"price"`
+	PostCode     string `json:"post_code"`
+}
+
+type TestStruct_List struct {
+	ID           int64  `json:"test_struct_id"`
+	PrimaryEmail string `json:"email"`
+	FirstName    string `json:"first_name"`
+	Age          int    `json:"age"`
 }
 
 func TestMain(m *testing.M) {
@@ -101,6 +145,21 @@ func createController() {
 	testStructNewFunc = func() interface{} {
 		return &TestStruct{}
 	}
+	testStructCreateNewFunc = func() interface{} {
+		return &TestStruct_Create{}
+	}
+	testStructUpdateNewFunc = func() interface{} {
+		return &TestStruct_Update{}
+	}
+	testStructReadNewFunc = func() interface{} {
+		return &TestStruct_Read{}
+	}
+	testStructListNewFunc = func() interface{} {
+		return &TestStruct_List{}
+	}
+	testStructUpdatePriceNewFunc = func() interface{} {
+		return &TestStruct_UpdatePrice{}
+	}
 	testStructObj = testStructNewFunc().(*TestStruct)
 }
 
@@ -109,10 +168,8 @@ func createHTTPServer() {
 	ctx, httpCancelCtx = context.WithCancel(context.Background())
 	go func(ctx context.Context) {
 		go func() {
-			http.HandleFunc(httpURI, testController.GetHTTPHandler(testStructNewFunc, httpURI))
-			/*http.HandleFunc("/"+httpURI+"/only_name/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/only_name/", OpList, []string{"FirstName", "LastName"}))
-			http.HandleFunc("/"+httpURI+"/update_price/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/update_price/", OpUpdate, []string{"Price"}))
-			http.HandleFunc("/"+httpURI+"/create/", testController.GetCustomHTTPHandler(testStructNewFunc, "/"+httpURI+"/create/", OpCreate | OpRead, []string{"PrimaryEmail", "FirstName", "LastName", "Age"}))*/
+			http.HandleFunc(httpURI, testController.GetHTTPHandler(httpURI, testStructNewFunc, testStructCreateNewFunc, testStructReadNewFunc, testStructUpdateNewFunc, testStructNewFunc, testStructListNewFunc))
+			http.HandleFunc(httpURI2, testController.GetHTTPHandler(httpURI2, testStructNewFunc, nil, nil, testStructUpdateNewFunc, nil, nil))
 			http.ListenAndServe(":"+httpPort, nil)
 		}()
 	}(ctx)
@@ -226,7 +283,7 @@ func makePUTInsertRequest(j string, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("PUT method failed to return body: %s", err.Error())
 	}
-	
+
 	return b
 }
 
@@ -248,7 +305,7 @@ func makePUTUpdateRequest(j string, id int64, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("PUT method failed to return body: %s", err.Error())
 	}
-	
+
 	return b
 }
 
@@ -302,7 +359,7 @@ func makeGETListRequest(uriParams map[string]string, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("PUT method failed to return body: %s", err.Error())
 	}
-	
+
 	return b
 }
 
