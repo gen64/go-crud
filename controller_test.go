@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"strconv"
 )
 
 func TestGetModelIDInterface(t *testing.T) {
@@ -209,7 +210,7 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 		"created_by_user_id": 12,
 		"key": "123456789012345678901234567890nbh"
 	}`
-	_ = makePUTUpdateRequest(j, 54, t)
+	_ = makePUTUpdateRequest(j, 54, false, t)
 
 	id, flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err := getRow()
 	if err != nil {
@@ -222,7 +223,31 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 }
 
 func TestHTTPHandlerPutMethodForUpdatingOnCustomEndpoint(t *testing.T) {
-	// TODO
+	j := `{
+		"test_struct_flags": 8,
+		"email": "test11@example.com",
+		"email2": "test22@example.com",
+		"first_name": "John2",
+		"last_name": "Smith2",
+		"age": 39,
+		"price": 444,
+		"post_code": "22-222",
+		"post_code2": "33-333",
+		"password": "password123updated",
+		"created_by_user_id": 12,
+		"key": "123456789012345678901234567890nbh"
+	}`
+	_ = makePUTUpdateRequest(j, 54, true, t)
+
+	id, flags, _, _, _, _, _, price, _, _, _, _, _, err := getRow()
+	if err != nil {
+		t.Fatalf("PUT method failed to update struct to the table: %s", err.Error())
+	}
+	// Only Price field should be updated. Check the TestStruct_Update struct
+	if id == 0 || flags != 0 || price != 444 {
+		t.Fatalf(strconv.Itoa(price))
+		t.Fatalf("PUT method on a custom endpoint failed to update struct in the table")
+	}
 }
 
 func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {

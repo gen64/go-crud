@@ -169,7 +169,7 @@ func createHTTPServer() {
 	go func(ctx context.Context) {
 		go func() {
 			http.HandleFunc(httpURI, testController.GetHTTPHandler(httpURI, testStructNewFunc, testStructCreateNewFunc, testStructReadNewFunc, testStructUpdateNewFunc, testStructNewFunc, testStructListNewFunc))
-			http.HandleFunc(httpURI2, testController.GetHTTPHandler(httpURI2, testStructNewFunc, nil, nil, testStructUpdateNewFunc, nil, nil))
+			http.HandleFunc(httpURI2, testController.GetHTTPHandler(httpURI2, testStructNewFunc, nil, nil, testStructUpdatePriceNewFunc, nil, nil))
 			http.ListenAndServe(":"+httpPort, nil)
 		}()
 	}(ctx)
@@ -287,8 +287,12 @@ func makePUTInsertRequest(j string, t *testing.T) []byte {
 	return b
 }
 
-func makePUTUpdateRequest(j string, id int64, t *testing.T) []byte {
-	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+httpURI+fmt.Sprintf("%d", id), bytes.NewReader([]byte(j)))
+func makePUTUpdateRequest(j string, id int64, customURI bool, t *testing.T) []byte {
+	uri := httpURI
+	if customURI {
+		uri = httpURI2
+	}
+	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+uri+fmt.Sprintf("%d", id), bytes.NewReader([]byte(j)))
 	if err != nil {
 		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
 	}
