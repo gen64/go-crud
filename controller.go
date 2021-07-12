@@ -41,7 +41,7 @@ func NewController(dbConn *sql.DB, tblPrefix string) *Controller {
 
 // DropDBTables drop tables in the database for specified objects (see
 // DropDBTable for a single struct)
-func (c Controller) DropDBTables(xobj ...interface{}) *ControllerError {
+func (c Controller) DropDBTables(xobj ...interface{}) *ErrController {
 	for _, obj := range xobj {
 		err := c.DropDBTable(obj)
 		if err != nil {
@@ -53,7 +53,7 @@ func (c Controller) DropDBTables(xobj ...interface{}) *ControllerError {
 
 // CreateDBTables creates tables in the database for specified objects (see
 // CreateDBTable for a single struct)
-func (c Controller) CreateDBTables(xobj ...interface{}) *ControllerError {
+func (c Controller) CreateDBTables(xobj ...interface{}) *ErrController {
 	for _, obj := range xobj {
 		err := c.CreateDBTable(obj)
 		if err != nil {
@@ -67,7 +67,7 @@ func (c Controller) CreateDBTables(xobj ...interface{}) *ControllerError {
 // takes struct name and its fields, converts them into table and columns names
 // (all lowercase with underscore), assigns column type based on the field type,
 // and then executes "CREATE TABLE" query on attached DB connection
-func (c Controller) CreateDBTable(obj interface{}) *ControllerError {
+func (c Controller) CreateDBTable(obj interface{}) *ErrController {
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
@@ -75,9 +75,9 @@ func (c Controller) CreateDBTable(obj interface{}) *ControllerError {
 
 	_, err2 := c.dbConn.Exec(h.GetQueryCreateTable())
 	if err2 != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "DBQuery",
-			Err: err2,
+			Err: fmt.Errorf("Error executing DB query: %w", err2),
 		}
 	}
 	return nil
@@ -86,7 +86,7 @@ func (c Controller) CreateDBTable(obj interface{}) *ControllerError {
 // DropDBTable drops database table used to store specified type of objects. It
 // just takes struct name, converts it to lowercase-with-underscore table name
 // and executes "DROP TABLE" query using attached DB connection
-func (c Controller) DropDBTable(obj interface{}) *ControllerError {
+func (c Controller) DropDBTable(obj interface{}) *ErrController {
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
@@ -94,9 +94,9 @@ func (c Controller) DropDBTable(obj interface{}) *ControllerError {
 
 	_, err2 := c.dbConn.Exec(h.GetQueryDropTable())
 	if err2 != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "DBQuery",
-			Err: err2,
+			Err: fmt.Errorf("Error executing DB query: %w", err2),
 		}
 	}
 	return nil
@@ -108,17 +108,26 @@ func (c Controller) DropDBTable(obj interface{}) *ControllerError {
 // that record with such ID already exists in the database and the function with
 // execute an "UPDATE" query. Otherwise it will be "INSERT". After inserting,
 // new record ID is set to struct's ID field
-func (c Controller) SaveToDB(obj interface{}) *ControllerError {
+func (c Controller) SaveToDB(obj interface{}) *ErrController {
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
 	}
 
-	b, _, err2 := c.Validate(obj, nil)
-	if err2 != nil || !b {
-		return &ControllerError{
+	b, invalidFields, err2 := c.Validate(obj, nil)
+	if err2 != nil {
+		return &ErrController{
 			Op:  "Validate",
-			Err: err2,
+			Err: fmt.Errorf("Error when trying to validate: %w", err2),
+		}
+	}
+
+	if !b {
+		return &ErrController{
+			Op: "Validate",
+			Err: &ErrValidation{
+				Fields: invalidFields,
+			},
 		}
 	}
 
@@ -129,9 +138,9 @@ func (c Controller) SaveToDB(obj interface{}) *ControllerError {
 		err3 = c.dbConn.QueryRow(h.GetQueryInsert(), c.GetModelFieldInterfaces(obj)...).Scan(c.GetModelIDInterface(obj))
 	}
 	if err3 != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "DBQuery",
-			Err: err3,
+			Err: fmt.Errorf("Error executing DB query: %w", err3),
 		}
 	}
 	return nil
@@ -140,12 +149,12 @@ func (c Controller) SaveToDB(obj interface{}) *ControllerError {
 // SetFromDB sets object's fields with values from the database table with a
 // specific id. If record does not exist in the database, all field values in
 // the struct are zeroed
-func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
+func (c Controller) SetFromDB(obj interface{}, id string) *ErrController {
 	idInt, err := strconv.Atoi(id)
 	if err != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "IDToInt",
-			Err: err,
+			Err: fmt.Errorf("Error converting string to int: %w", err),
 		}
 	}
 
@@ -159,9 +168,9 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 		c.ResetFields(obj)
 		return nil
 	case err3 != nil:
-		return &ControllerError{
+		return &ErrController{
 			Op:  "DBQuery",
-			Err: err,
+			Err: fmt.Errorf("Error executing DB query: %w", err),
 		}
 	default:
 		return nil
@@ -171,7 +180,7 @@ func (c Controller) SetFromDB(obj interface{}, id string) *ControllerError {
 // DeleteFromDB removes object from the database table and it does that only
 // when ID field is set (greater than 0). Once deleted from the DB, all field
 // values are zeroed
-func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
+func (c Controller) DeleteFromDB(obj interface{}) *ErrController {
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return err
@@ -181,9 +190,9 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 	}
 	_, err2 := c.dbConn.Exec(h.GetQueryDeleteById(), c.GetModelIDInterface(obj))
 	if err2 != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "DBQuery",
-			Err: err2,
+			Err: fmt.Errorf("Error executing DB query: %w", err2),
 		}
 	}
 	c.ResetFields(obj)
@@ -192,27 +201,36 @@ func (c Controller) DeleteFromDB(obj interface{}) *ControllerError {
 
 // GetFromDB runs a select query on the database with specified filters, order,
 // limit and offset and returns a list of objects
-func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ControllerError) {
+func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, limit int, offset int, filters map[string]interface{}) ([]interface{}, *ErrController) {
 	obj := newObjFunc()
 	h, err := c.getHelper(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	b, _, err1 := c.Validate(obj, filters)
-	if err1 != nil || !b {
-		return nil, &ControllerError{
+	b, invalidFields, err1 := c.Validate(obj, filters)
+	if err1 != nil {
+		return nil, &ErrController{
 			Op:  "ValidateFilters",
-			Err: err1,
+			Err: fmt.Errorf("Error when trying to validate filters: %w", err1),
+		}
+	}
+
+	if !b {
+		return nil, &ErrController{
+			Op: "ValidateFilters",
+			Err: &ErrValidation{
+				Fields: invalidFields,
+			},
 		}
 	}
 
 	var v []interface{}
 	rows, err2 := c.dbConn.Query(h.GetQuerySelect(order, limit, offset, filters, nil, nil), c.GetFiltersInterfaces(filters)...)
 	if err2 != nil {
-		return nil, &ControllerError{
+		return nil, &ErrController{
 			Op:  "DBQuery",
-			Err: err2,
+			Err: fmt.Errorf("Error executing DB query: %w", err2),
 		}
 	}
 	defer rows.Close()
@@ -221,9 +239,9 @@ func (c Controller) GetFromDB(newObjFunc func() interface{}, order []string, lim
 		newObj := newObjFunc()
 		err3 := rows.Scan(append(append(make([]interface{}, 0), c.GetModelIDInterface(newObj)), c.GetModelFieldInterfaces(newObj)...)...)
 		if err3 != nil {
-			return nil, &ControllerError{
+			return nil, &ErrController{
 				Op:  "DBQueryRowsScan",
-				Err: err3,
+				Err: fmt.Errorf("Error scanning DB query row: %w", err3),
 			}
 		}
 		v = append(v, newObj)
@@ -444,8 +462,6 @@ func (c Controller) Validate(obj interface{}, filters map[string]interface{}) (b
 			b = false
 		}
 	}
-	//log.Print(h.dbFieldCols)
-	//log.Print(failedFields)
 	return b, failedFields, nil
 }
 
@@ -515,7 +531,7 @@ func (c *Controller) validateFieldRegExp(valueField reflect.Value, re *regexp.Re
 
 // initHelpers creates all the Helper objects. For HTTP endpoints, it is
 // necessary to create these first
-func (c *Controller) initHelpersForHTTPHandler(newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) *ControllerError {
+func (c *Controller) initHelpersForHTTPHandler(newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) *ErrController {
 	obj := newObjFunc()
 	v := reflect.ValueOf(obj)
 	i := reflect.Indirect(v)
@@ -551,7 +567,7 @@ func (c *Controller) initHelpersForHTTPHandler(newObjFunc func() interface{}, ne
 	return nil
 }
 
-func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string, sourceHelper *Helper) *ControllerError {
+func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string, sourceHelper *Helper) *ErrController {
 	if newObjFunc == nil {
 		return nil
 	}
@@ -563,9 +579,9 @@ func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string,
 	n := s.Name()
 	h := NewHelper(obj, c.dbTblPrefix, forceName, sourceHelper)
 	if h.Err() != nil {
-		return &ControllerError{
+		return &ErrController{
 			Op:  "InitHelperWithForcedName",
-			Err: h.Err(),
+			Err: fmt.Errorf("Error initialising Helper with forced name: %w", h.Err()),
 		}
 	}
 	c.modelHelpers[n] = h
@@ -574,7 +590,7 @@ func (c *Controller) initHelper(newObjFunc func() interface{}, forceName string,
 
 // getHelper returns a special Helper instance which reflects the struct type
 // to get SQL queries, validation etc.
-func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
+func (c *Controller) getHelper(obj interface{}) (*Helper, *ErrController) {
 	v := reflect.ValueOf(obj)
 	i := reflect.Indirect(v)
 	s := i.Type()
@@ -582,9 +598,9 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ControllerError) {
 	if c.modelHelpers[n] == nil {
 		h := NewHelper(obj, c.dbTblPrefix, "", nil)
 		if h.Err() != nil {
-			return nil, &ControllerError{
+			return nil, &ErrController{
 				Op:  "GetHelper",
-				Err: h.Err(),
+				Err: fmt.Errorf("Error getting Helper: %w", h.Err()),
 			}
 		}
 		c.modelHelpers[n] = h
@@ -804,12 +820,12 @@ func (c Controller) isKeyInMap(k string, m map[string]interface{}) bool {
 	return false
 }
 
-func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filterValue string) (string, interface{}, *ControllerError) {
+func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filterValue string) (string, interface{}, *ErrController) {
 	h, err := c.getHelper(obj)
 	if err != nil {
-		return "", nil, &ControllerError{
+		return "", nil, &ErrController{
 			Op:  "GetHelper",
-			Err: err,
+			Err: fmt.Errorf("Error getting Helper: %w", err),
 		}
 	}
 
@@ -822,9 +838,9 @@ func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filter
 	if valueField.Type().Name() == "int" {
 		filterInt, err := strconv.Atoi(filterValue)
 		if err != nil {
-			return "", nil, &ControllerError{
+			return "", nil, &ErrController{
 				Op:  "InvalidValue",
-				Err: err,
+				Err: fmt.Errorf("Error converting string to int: %w", err),
 			}
 		}
 		return h.dbCols[filterName], filterInt, nil
@@ -832,9 +848,9 @@ func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filter
 	if valueField.Type().Name() == "int64" {
 		filterInt64, err := strconv.ParseInt(filterValue, 10, 64)
 		if err != nil {
-			return "", nil, &ControllerError{
+			return "", nil, &ErrController{
 				Op:  "InvalidValue",
-				Err: err,
+				Err: fmt.Errorf("Error converting string to int64: %w", err),
 			}
 		}
 		return h.dbCols[filterName], filterInt64, nil

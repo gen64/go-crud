@@ -135,7 +135,7 @@ func TestValidationFields(t *testing.T) {
 	}
 
 	got2 := h.fieldsLength
-	want2 := map[string][2]int{"FirstName": {2, 30}, "LastName": {0, 255}, "PostCode": {6, 0}, "PostCode2": {6, 0}, "Key": {30, 255}}
+	want2 := map[string][2]int{"FirstName": {2, 30}, "LastName": {0, 255}, "PostCode": {6, -1}, "PostCode2": {6, -1}, "Key": {30, 255}}
 	/*if len(got2) != len(want2) {
 		t.Fatalf("Field lengths: want %v, got %v", len(want2), len(got2))
 	}*/

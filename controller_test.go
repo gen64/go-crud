@@ -1,7 +1,12 @@
 package crud
 
 import (
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -44,18 +49,24 @@ func TestCreateDBTables(t *testing.T) {
 	}
 }
 
-func TestValidate(t *testing.T) {
+func TestValidateWithValidStruct(t *testing.T) {
 	ts := getTestStructWithData()
-	ts.PrimaryEmail = "primary@gen64.net"
-	ts.EmailSecondary = "secondary@gen64.net"
-	ts.PostCode = "00-000"
 	b, failedFields, err := testController.Validate(ts, nil)
-	log.Print(failedFields)
-	log.Print(b)
-	log.Print(err)
+	if !b {
+		t.Fatalf("Validate failed validate valid struct")
+	}
+	if len(failedFields) > 0 {
+		t.Fatalf("Validate return non-empty failed field list when validating a valid struct")
+	}
+	if err != nil {
+		t.Fatalf("Validate failed to validate valid struct: %s", err.Error())
+	}
 }
 
-/*
+func TestValidateWithInvalidStruct(t *testing.T) {
+	// TODO
+}
+
 func TestSaveToDB(t *testing.T) {
 	ts := getTestStructWithData()
 
@@ -82,8 +93,12 @@ func TestSaveToDB(t *testing.T) {
 	ts.PostCode2 = "33-333"
 	ts.Password = "xxx"
 	ts.CreatedByUserID = 7
-	ts.Key = "reallyunique"
-	_ = testController.SaveToDB(ts)
+	ts.Key = "123456789012345678901234567890aaa"
+
+	err3 := testController.SaveToDB(ts)
+	if err3 != nil {
+		t.Fatalf("SaveToDB failed to update struct")
+	}
 
 	flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err2 = getRowById(id)
 	if err2 != nil {
@@ -164,7 +179,7 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 		"email": "test@example.com",
 		"first_name": "John",
 		"last_name": "Smith",
-		"key": "uniquekey1"
+		"key": "123456789012345678901234567890aa"
 	}`
 	_ = makePUTInsertRequest(j, t)
 
@@ -172,7 +187,7 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT method failed to insert struct to the table: %s", err.Error())
 	}
-	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John" || lastName != "Smith" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "uniquekey1" || password != "" {
+	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John" || lastName != "Smith" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "123456789012345678901234567890aa" || password != "" {
 		t.Fatalf("PUT method failed to insert struct to the table")
 	}
 
@@ -187,12 +202,12 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 		"first_name": "John2",
 		"last_name": "Smith2",
 		"age": 39,
-		"price": 1002,
+		"price": 199,
 		"post_code": "22-222",
 		"post_code2": "33-333",
 		"password": "password123updated",
 		"created_by_user_id": 12,
-		"key": "uniquekey2"
+		"key": "123456789012345678901234567890nbh"
 	}`
 	_ = makePUTUpdateRequest(j, 54, t)
 
@@ -201,9 +216,13 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 		t.Fatalf("PUT method failed to update struct to the table: %s", err.Error())
 	}
 	// Only 2 fields should be updated: FirstName and LastName. Check the TestStruct_Update struct
-	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John2" || lastName != "Smith2" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "uniquekey1" || password != "" {
-		t.Fatalf("PUT method failed to insert struct to the table")
+	if id == 0 || flags != 0 || primaryEmail != "test@example.com" || emailSecondary != "" || firstName != "John2" || lastName != "Smith2" || age != 0 || price != 0 || postCode != "" || postCode2 != "" || createdByUserID != 0 || key != "123456789012345678901234567890aa" || password != "" {
+		t.Fatalf("PUT method failed to update struct in the table")
 	}
+}
+
+func TestHTTPHandlerPutMethodForUpdatingOnCustomEndpoint(t *testing.T) {
+	// TODO
 }
 
 func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
@@ -315,4 +334,3 @@ func TestDropDBTables(t *testing.T) {
 		t.Fatalf("DropDBTables failed to drop the table")
 	}
 }
-*/

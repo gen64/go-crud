@@ -305,7 +305,6 @@ func makePUTUpdateRequest(j string, id int64, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("PUT method failed to return body: %s", err.Error())
 	}
-
 	return b
 }
 

@@ -49,7 +49,7 @@ type Helper struct {
 
 	defaultFieldsTags map[string]map[string]string
 
-	err *HelperError
+	err *ErrHelper
 }
 
 const TypeInt64 = 64
@@ -66,7 +66,7 @@ func NewHelper(obj interface{}, dbTblPrefix string, forceName string, sourceHelp
 }
 
 // Err returns error that occurred when reflecting struct
-func (h *Helper) Err() *HelperError {
+func (h *Helper) Err() *ErrHelper {
 	return h.err
 }
 
@@ -305,7 +305,7 @@ func (h *Helper) reflectStructForValidation(u interface{}) {
 
 		h.setFieldFromName(field.Name)
 
-		h.fieldsLength[field.Name] = [2]int{0, 0}
+		h.fieldsLength[field.Name] = [2]int{-1, -1}
 		h.fieldsValue[field.Name] = [2]int{0, 0}
 		h.fieldsValueNotNil[field.Name] = [2]bool{false, false}
 
@@ -350,15 +350,15 @@ func (h *Helper) setFieldFromName(fieldName string) {
 }
 
 func (h *Helper) setFieldFromTag(tag string, fieldIdx int, fieldName string) {
-	var helperError *HelperError
+	var errHelper *ErrHelper
 	opts := strings.SplitN(tag, " ", -1)
 	for _, opt := range opts {
-		if helperError != nil {
+		if errHelper != nil {
 			break
 		}
 		h.setFieldFromTagOptWithoutVal(opt, fieldIdx, fieldName)
-		helperError = h.setFieldFromTagOptWithVal(opt, fieldIdx, fieldName)
-		if helperError != nil {
+		errHelper = h.setFieldFromTagOptWithVal(opt, fieldIdx, fieldName)
+		if errHelper != nil {
 			return
 		}
 	}
@@ -376,7 +376,7 @@ func (h *Helper) setFieldFromTagOptWithoutVal(opt string, fieldIdx int, fieldNam
 	}
 }
 
-func (h *Helper) setFieldFromTagOptWithVal(opt string, fieldIdx int, fieldName string) *HelperError {
+func (h *Helper) setFieldFromTagOptWithVal(opt string, fieldIdx int, fieldName string) *ErrHelper {
 	for _, valOpt := range []string{"lenmin", "lenmax", "valmin", "valmax", "regexp"} {
 		if strings.HasPrefix(opt, valOpt+":") {
 			val := strings.Replace(opt, valOpt+":", "", 1)
@@ -386,7 +386,7 @@ func (h *Helper) setFieldFromTagOptWithVal(opt string, fieldIdx int, fieldName s
 			}
 			i, err := strconv.Atoi(val)
 			if err != nil {
-				return &HelperError{
+				return &ErrHelper{
 					Op:  "ParseTag",
 					Tag: valOpt,
 					Err: fmt.Errorf("strconv.Atoi failed: %w", err),
