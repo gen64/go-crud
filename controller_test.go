@@ -6,9 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
-	"strconv"
 )
 
 func TestGetModelIDInterface(t *testing.T) {
@@ -262,12 +262,15 @@ func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
 		t.Fatalf("GET method failed")
 	}
 
-	ts := testStructNewFunc().(*TestStruct)
-	err = json.Unmarshal(body, ts)
+	r := NewHTTPResponse(1, "")
+	err = json.Unmarshal(body, &r)
 	if err != nil {
-		t.Fatalf("GET method failed to return unmarshable JSON")
+		t.Fatalf("GET method failed to return unmarshable JSON: " + err.Error())
 	}
-	if ts.Age != 0 {
+	if r.Data["item"].(map[string]interface{})["age"].(float64) != 0 {
+		t.Fatalf("GET method returned invalid values")
+	}
+	if r.Data["item"].(map[string]interface{})["price"].(float64) != 444 {
 		t.Fatalf("GET method returned invalid values")
 	}
 	if strings.Contains(string(body), "email2") {
@@ -318,22 +321,19 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 		"filter_primary_email": "primary@gen64.net",
 	}, t)
 
-	o := struct {
-		Items []map[string]interface{} `json:"items"`
-	}{
-		Items: []map[string]interface{}{},
-	}
-	err := json.Unmarshal(b, &o)
+	r := NewHTTPResponse(1, "")
+	err := json.Unmarshal(b, &r)
+	log.Print(string(b))
 	if err != nil {
 		t.Fatalf("GET method returned wrong json output, error marshaling: %s", err.Error())
 	}
 
-	if len(o.Items) != 10 {
-		t.Fatalf("GET method returned invalid number of rows, want %d got %d", 10, len(o.Items))
+	if len(r.Data["items"].([]interface{})) != 10 {
+		t.Fatalf("GET method returned invalid number of rows, want %d got %d", 10, len(r.Data["items"].([]interface{})))
 	}
 
-	if o.Items[2]["age"].(float64) != 52 {
-		t.Fatalf("GET method returned invalid row, want %d got %f", 52, o.Items[2]["age"].(float64))
+	if r.Data["items"].([]interface{})[2].(map[string]interface{})["age"].(float64) != 52 {
+		t.Fatalf("GET method returned invalid row, want %d got %f", 52, r.Data["items"].([]interface{})[2].(map[string]interface{})["age"].(float64))
 	}
 
 	if strings.Contains(string(b), "email2") {

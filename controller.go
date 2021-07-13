@@ -611,7 +611,7 @@ func (c *Controller) getHelper(obj interface{}) (*Helper, *ErrController) {
 func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		c.writeErrText(w, http.StatusInternalServerError, "cannot_read_request_body")
 		return
 	}
 
@@ -620,11 +620,11 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 	if id != "" {
 		err2 := c.SetFromDB(objClone, id)
 		if err2 != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			c.writeErrText(w, http.StatusInternalServerError, "cannot_get_from_db")
 			return
 		}
 		if c.GetModelIDValue(objClone) == 0 {
-			w.WriteHeader(http.StatusNotFound)
+			c.writeErrText(w, http.StatusNotFound, "not_found_in_db")
 			return
 		}
 	} else {
@@ -633,25 +633,25 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 
 	err = json.Unmarshal(body, objClone)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		c.writeErrText(w, http.StatusBadRequest, "invalid_json")
 		return
 	}
 
 	b, _, err := c.Validate(objClone, nil)
 	if !b || err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(fmt.Sprintf("{\"err\":\"validation failed: %s\"}", err)))
+		c.writeErrText(w, http.StatusBadRequest, "validation_failed")
 		return
 	}
 
 	err2 := c.SaveToDB(objClone)
 	if err2 != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		c.writeErrText(w, http.StatusInternalServerError, "cannot_save_to_db")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write(c.jsonID(c.GetModelIDValue(objClone)))
+	c.writeOK(w, http.StatusOK, map[string]interface{}{
+		"id": c.GetModelIDValue(objClone),
+	})
 }
 
 func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
@@ -681,10 +681,10 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 				fieldName, fieldValue, errF := c.uriFilterToFilter(obj, k, v)
 				if errF != nil {
 					if errF.Op == "GetHelper" {
-						w.WriteHeader(http.StatusInternalServerError)
+						c.writeErrText(w, http.StatusInternalServerError, "get_helper")
 						return
 					} else {
-						w.WriteHeader(http.StatusBadRequest)
+						c.writeErrText(w, http.StatusBadRequest, "invalid_filter")
 						return
 					}
 				}
@@ -696,23 +696,18 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 		xobj, err1 := c.GetFromDB(newObjFunc, order, limit, offset, filters)
 		if err1 != nil {
 			if err1.Op == "ValidateFilters" {
-				w.WriteHeader(http.StatusBadRequest)
+				c.writeErrText(w, http.StatusBadRequest, "invalid_filter_value")
 				return
 			} else {
-				w.WriteHeader(http.StatusInternalServerError)
+				c.writeErrText(w, http.StatusInternalServerError, "cannot_get_from_db")
 				return
 			}
 		}
-		u := make(map[string]interface{})
-		u["items"] = xobj
-		j, err2 := json.Marshal(u)
-		if err2 != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
 
-		w.WriteHeader(http.StatusOK)
-		w.Write(j)
+		c.writeOK(w, http.StatusOK, map[string]interface{}{
+			"items": xobj,
+		})
+
 		return
 	}
 
@@ -720,29 +715,23 @@ func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObj
 
 	err := c.SetFromDB(objClone, id)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		c.writeErrText(w, http.StatusInternalServerError, "cannot_get_from_db")
 		return
 	}
 
 	if c.GetModelIDValue(objClone) == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		c.writeErrText(w, http.StatusNotFound, "not_found_in_db")
 		return
 	}
 
-	j, err2 := json.Marshal(objClone)
-	if err2 != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write(j)
+	c.writeOK(w, http.StatusOK, map[string]interface{}{
+		"item": objClone,
+	})
 }
 
 func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {
 	if id == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write(c.jsonError("id missing"))
+		c.writeErrText(w, http.StatusBadRequest, "invalid_id")
 		return
 	}
 
@@ -750,21 +739,23 @@ func (c Controller) handleHTTPDelete(w http.ResponseWriter, r *http.Request, new
 
 	err := c.SetFromDB(objClone, id)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		c.writeErrText(w, http.StatusInternalServerError, "cannot_get_from_db")
 		return
 	}
 	if c.GetModelIDValue(objClone) == 0 {
-		w.WriteHeader(http.StatusNotFound)
+		c.writeErrText(w, http.StatusNotFound, "not_found_in_db")
 		return
 	}
 
 	err = c.DeleteFromDB(objClone)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+		c.writeErrText(w, http.StatusInternalServerError, "cannot_delete_from_db")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	c.writeOK(w, http.StatusOK, map[string]interface{}{
+		"id": id,
+	})
 }
 
 func (c Controller) getIDFromURI(uri string, w http.ResponseWriter) (string, bool) {
@@ -860,4 +851,23 @@ func (c Controller) uriFilterToFilter(obj interface{}, filterName string, filter
 	}
 
 	return "", nil, nil
+}
+
+func (c Controller) writeErrText(w http.ResponseWriter, status int, errText string) {
+	r := NewHTTPResponse(0, errText)
+	j, err := json.Marshal(r)
+	w.WriteHeader(status)
+	if err == nil {
+		w.Write(j)
+	}
+}
+
+func (c Controller) writeOK(w http.ResponseWriter, status int, data map[string]interface{}) {
+	r := NewHTTPResponse(1, "")
+	r.Data = data
+	j, err := json.Marshal(r)
+	w.WriteHeader(status)
+	if err == nil {
+		w.Write(j)
+	}
 }
