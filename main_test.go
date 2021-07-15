@@ -265,7 +265,7 @@ func areTestStructObjectSame(ts1 *TestStruct, ts2 *TestStruct) bool {
 	return true
 }
 
-func makePUTInsertRequest(j string, t *testing.T) []byte {
+func makePUTInsertRequest(j string, status int, t *testing.T) []byte {
 	req, err := http.NewRequest("PUT", "http://localhost:"+httpPort+httpURI, bytes.NewReader([]byte(j)))
 	if err != nil {
 		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
@@ -275,8 +275,8 @@ func makePUTInsertRequest(j string, t *testing.T) []byte {
 	if err != nil {
 		t.Fatalf("PUT method failed on HTTP server with handler from GetHTTPHandler: %s", err.Error())
 	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("PUT method returned wrong status code, want %d, got %d", http.StatusOK, resp.StatusCode)
+	if resp.StatusCode != status {
+		t.Fatalf("PUT method returned wrong status code, want %d, got %d", status, resp.StatusCode)
 	}
 
 	b, err := ioutil.ReadAll(resp.Body)
@@ -372,4 +372,13 @@ func addWithAmpersand(s string, v string) string {
 	}
 	s += v
 	return s
+}
+
+func isInTheList(xs []string, v string) bool {
+	for _, s := range xs {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }

@@ -649,9 +649,15 @@ func (c Controller) handleHTTPPut(w http.ResponseWriter, r *http.Request, newObj
 		return
 	}
 
-	c.writeOK(w, http.StatusOK, map[string]interface{}{
-		"id": c.GetModelIDValue(objClone),
-	})
+	if id != "" {
+		c.writeOK(w, http.StatusOK, map[string]interface{}{
+			"id": c.GetModelIDValue(objClone),
+		})
+	} else {
+		c.writeOK(w, http.StatusCreated, map[string]interface{}{
+			"id": c.GetModelIDValue(objClone),
+		})
+	}
 }
 
 func (c Controller) handleHTTPGet(w http.ResponseWriter, r *http.Request, newObjFunc func() interface{}, id string) {

@@ -65,7 +65,28 @@ func TestValidateWithValidStruct(t *testing.T) {
 }
 
 func TestValidateWithInvalidStruct(t *testing.T) {
-	// TODO
+	ts := getTestStructWithData()
+	ts.PrimaryEmail = "invalidemail"
+	ts.EmailSecondary = "invalidemail"
+	ts.FirstName = "x"
+	ts.LastName = "aFbdsZFYxMpUNKCkBrHhhODrMBEHtmRAJjoqSSfUotvsfMXcJGPrCRaDOsyuyrXYfACjsJEMUoxNvTwRMUaWYruOxgzTXJRzobmxaFbdsZFYxMpUNKCkBrHhhODrMBEHtmRAJjoqSSfUotvsfMXcJGPrCRaDOsyuyrXYfACjsJEMUoxNvTwRMUaWYruOxgzTXJRzobmxaFbdsZFYxMpUNKCkBrHhhODrMBEHtmRAJjoqSSfUotvsfMXcJGPrCRaDOsyuyrXYfACjsJEMUoxNvTwRMUaWYruOxgzTXJRzobmxaFbdsZFYxMpUNKCkBrHhhODrMBEHtmRAJjoqSSfUotvsfMXcJGPrCRaDOsyuyrXYfACjsJEMUoxNvTwRMUaWYruOxgzTXJRzobmx"
+	ts.Age = 0
+	ts.Price = 1000
+	ts.PostCode = "inv"
+	ts.PostCode2 = "inv"
+	ts.Key = "tooshort"
+	b, failedFields, err := testController.Validate(ts, nil)
+	if err != nil {
+		t.Fatalf("Validate failed with an err")
+	}
+	if b {
+		t.Fatalf("Validate failed to return false for struct with invalid field values")
+	}
+	for _, f := range []string{"PrimaryEmail", "EmailSecondary", "FirstName", "LastName", "Age", "Price", "PostCode", "PostCode2", "Key"} {
+		if !isInTheList(failedFields, f) {
+			t.Fatalf(fmt.Sprintf("Validate failed to return field %s in failed fields", f))
+		}
+	}
 }
 
 func TestSaveToDB(t *testing.T) {
@@ -172,7 +193,16 @@ func TestGetFromDB(t *testing.T) {
 }
 
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
-	// TODO
+	j := `{
+		"email": "invalid",
+		"first_name": "J",
+		"last_name": "S",
+		"key": "12"
+	}`
+	b := makePUTInsertRequest(j, http.StatusBadRequest, t)
+	if !strings.Contains(string(b), "validation_failed") {
+		t.Fatalf("PUT method for invalid request did not output validation_failed error text")
+	}
 }
 
 func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
@@ -182,7 +212,7 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 		"last_name": "Smith",
 		"key": "123456789012345678901234567890aa"
 	}`
-	_ = makePUTInsertRequest(j, t)
+	b := makePUTInsertRequest(j, http.StatusCreated, t)
 
 	id, flags, primaryEmail, emailSecondary, firstName, lastName, age, price, postCode, postCode2, password, createdByUserID, key, err := getRow()
 	if err != nil {
@@ -192,7 +222,15 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 		t.Fatalf("PUT method failed to insert struct to the table")
 	}
 
-	// TODO: Check if response contains JSON with key 'id'
+	r := NewHTTPResponse(1, "")
+	err = json.Unmarshal(b, &r)
+	if err != nil {
+		t.Fatalf("PUT method returned wrong json output, error marshaling: %s", err.Error())
+	}
+
+	if r.Data["id"].(float64) == 0 {
+		t.Fatalf("PUT method did not return id")
+	}
 }
 
 func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
@@ -323,7 +361,6 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 
 	r := NewHTTPResponse(1, "")
 	err := json.Unmarshal(b, &r)
-	log.Print(string(b))
 	if err != nil {
 		t.Fatalf("GET method returned wrong json output, error marshaling: %s", err.Error())
 	}
