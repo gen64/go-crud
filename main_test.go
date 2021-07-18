@@ -163,13 +163,21 @@ func createController() {
 	testStructObj = testStructNewFunc().(*TestStruct)
 }
 
+func getWrappedHTTPHandler(httpURI string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), "UserID", 123)
+		req := r.WithContext(ctx)
+		next.ServeHTTP(w, req)
+	})
+}
+
 func createHTTPServer() {
 	var ctx context.Context
 	ctx, httpCancelCtx = context.WithCancel(context.Background())
 	go func(ctx context.Context) {
 		go func() {
-			http.HandleFunc(httpURI, testController.GetHTTPHandler(httpURI, testStructNewFunc, testStructCreateNewFunc, testStructReadNewFunc, testStructUpdateNewFunc, testStructNewFunc, testStructListNewFunc))
-			http.HandleFunc(httpURI2, testController.GetHTTPHandler(httpURI2, testStructNewFunc, nil, nil, testStructUpdatePriceNewFunc, nil, nil))
+			http.Handle(httpURI, getWrappedHTTPHandler(httpURI, http.HandlerFunc(testController.GetHTTPHandler(httpURI, testStructNewFunc, testStructCreateNewFunc, testStructReadNewFunc, testStructUpdateNewFunc, testStructNewFunc, testStructListNewFunc))))
+			http.Handle(httpURI2, http.HandlerFunc(testController.GetHTTPHandler(httpURI2, testStructNewFunc, nil, nil, testStructUpdatePriceNewFunc, nil, nil)))
 			http.ListenAndServe(":"+httpPort, nil)
 		}()
 	}(ctx)
