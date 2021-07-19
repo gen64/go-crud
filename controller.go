@@ -322,10 +322,10 @@ func (c Controller) ResetFields(obj interface{}) {
 // struct with different fields can be used.
 // It's important to pass "uri" argument same as the one that the handler is
 // attached to.
-func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) func(http.ResponseWriter, *http.Request) {
+func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) http.Handler {
 	c.initHelpersForHTTPHandler(newObjFunc, newObjCreateFunc, newObjReadFunc, newObjUpdateFunc, newObjDeleteFunc, newObjListFunc)
 
-	fn := func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id, b := c.getIDFromURI(r.RequestURI[len(uri):], w)
 		if !b {
 			return
@@ -352,8 +352,7 @@ func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, ne
 		}
 
 		w.WriteHeader(http.StatusBadRequest)
-	}
-	return fn
+	})
 }
 
 // Validate checks object's fields. It returns result of validation as
