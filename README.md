@@ -5,6 +5,9 @@
 Package CRUD is meant to make two things: map structs to PostgreSQL tables
 (like ORM) and create CRUD HTTP endpoint for simple data management.
 
+HTTP endpoint can be set to allow creating, updating, removing new object, 
+along with returning its details, or list of objects. All requests and
+responses are in the JSON format.
 
 ## Example usage
 ### Structs (models)
@@ -170,4 +173,15 @@ In this case, `User_Create` and `User_Update`.
 }
 ```
 
-Output from the endpoint is in JSON format as well.
+Output from the endpoint is in JSON format as well and it follows below
+structure:
+
+```
+{
+	"ok": 1,
+	"err_text": "...",
+	"data": {
+		...
+	}
+}
+```
