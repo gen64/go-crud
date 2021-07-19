@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+// TestGetModelIDInterface tests if GetModelIDInterface return pointer to ID
+// field
 func TestGetModelIDInterface(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	ts.ID = 123
@@ -20,6 +22,7 @@ func TestGetModelIDInterface(t *testing.T) {
 	}
 }
 
+// TestGetModelIDValue tests if GetModelIDValue returns values of the ID field
 func TestGetModelIDValue(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	ts.ID = 123
@@ -29,14 +32,19 @@ func TestGetModelIDValue(t *testing.T) {
 	}
 }
 
+// TestGetModelFieldInterfaces tests if GetModelFieldInterfaces returns
+// interfaces to object fields
 func TestGetModelFieldInterfaces(t *testing.T) {
 	// TODO
 }
 
+// TestResetFields tests if ResetFields zeroes object fields
 func TestResetFields(t *testing.T) {
 	// TODO
 }
 
+// TestCreateDBTables tests if CreateDBTables creates tables in the
+// database
 func TestCreateDBTables(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	_ = testController.CreateDBTables(ts)
@@ -50,6 +58,8 @@ func TestCreateDBTables(t *testing.T) {
 	}
 }
 
+// TestValidateWithValidStruct tests if Validate successfully validates object
+// with valid values
 func TestValidateWithValidStruct(t *testing.T) {
 	ts := getTestStructWithData()
 	b, failedFields, err := testController.Validate(ts, nil)
@@ -64,6 +74,8 @@ func TestValidateWithValidStruct(t *testing.T) {
 	}
 }
 
+// TestValidateWithInvalidStruct tests if Validate invalidates object with
+// invalid values
 func TestValidateWithInvalidStruct(t *testing.T) {
 	ts := getTestStructWithData()
 	ts.PrimaryEmail = "invalidemail"
@@ -89,6 +101,8 @@ func TestValidateWithInvalidStruct(t *testing.T) {
 	}
 }
 
+// TestSaveToDB tests if SaveToDB properly inserts and updates object in the
+// database
 func TestSaveToDB(t *testing.T) {
 	ts := getTestStructWithData()
 
@@ -131,6 +145,8 @@ func TestSaveToDB(t *testing.T) {
 	}
 }
 
+// TestSetFromDB tests if SetFromDB properly gets row from the database table
+// and populate object fields with its value
 func TestSetFromDB(t *testing.T) {
 	ts := getTestStructWithData()
 	err := testController.SaveToDB(ts)
@@ -149,6 +165,7 @@ func TestSetFromDB(t *testing.T) {
 	}
 }
 
+// TestDeleteFromDB tests if DeleteFromDB removes object from the database
 func TestDeleteFromDB(t *testing.T) {
 	ts := getTestStructWithData()
 	err := testController.SaveToDB(ts)
@@ -172,6 +189,8 @@ func TestDeleteFromDB(t *testing.T) {
 	}
 }
 
+// TestGetFromDB tests if GetFromDB properly gets many objects from the
+// database, filtered and ordered, with results limited to specific number
 func TestGetFromDB(t *testing.T) {
 	for i := 1; i < 51; i++ {
 		ts := getTestStructWithData()
@@ -192,6 +211,8 @@ func TestGetFromDB(t *testing.T) {
 	}
 }
 
+// TestHTTPHanlderPutMethodForValidations checks if HTTP endpoint returns
+// validation failed error when PUT request with invalid input is made
 func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
 	j := `{
 		"email": "invalid",
@@ -205,6 +226,8 @@ func TestHTTPHandlerPutMethodForValidation(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerPutMethodForCreating tests if HTTP endpoint properly creates
+// new object in the database, when PUT request is made, without object ID
 func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	j := `{
 		"email": "test@example.com",
@@ -233,6 +256,8 @@ func TestHTTPHandlerPutMethodForCreating(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerPutMethodForUpdating tests if HTTP endpoint successfully
+// updates object details when PUT request with ID is being made
 func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 	j := `{
 		"test_struct_flags": 8,
@@ -260,6 +285,9 @@ func TestHTTPHandlerPutMethodForUpdating(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerPutMethodForUpdatingOnCustomEndpoint tests if HTTP endpoint
+// successfully updates object when PUT request with ID is being made, and
+// when the endpoint is a custom endpoint (it actually does not matter that much)
 func TestHTTPHandlerPutMethodForUpdatingOnCustomEndpoint(t *testing.T) {
 	j := `{
 		"test_struct_flags": 8,
@@ -288,6 +316,8 @@ func TestHTTPHandlerPutMethodForUpdatingOnCustomEndpoint(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerGetMethodOnExisting checks if HTTP endpoint properly return
+// object details, when GET request with object ID is made
 func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
 	resp := makeGETReadRequest(54, t)
 
@@ -319,6 +349,8 @@ func TestHTTPHandlerGetMethodOnExisting(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerDeleteMethod tests if HTTP endpoint removes object from the
+// database, when DELETE request is made
 func TestHTTPHandlerDeleteMethod(t *testing.T) {
 	makeDELETERequest(54, t)
 
@@ -331,6 +363,8 @@ func TestHTTPHandlerDeleteMethod(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerGetMethodOnNonExisting checks HTTP endpoint response when
+// making GET request with non-existing object ID
 func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
 	resp := makeGETReadRequest(54, t)
 
@@ -339,6 +373,8 @@ func TestHTTPHandlerGetMethodOnNonExisting(t *testing.T) {
 	}
 }
 
+// TestHTTPHandlerGetMethodWithoutID tests if HTTP endpoint returns list of
+// objects when GET request without ID is done; request contains filters, order and result limit
 func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	for i := 1; i <= 55; i++ {
@@ -381,6 +417,8 @@ func TestHTTPHandlerGetMethodWithoutID(t *testing.T) {
 	}
 }
 
+// TestDropDBTables tests if DropDBTables successfully drops tables from the
+// database
 func TestDropDBTables(t *testing.T) {
 	ts := testStructNewFunc().(*TestStruct)
 	err := testController.DropDBTables(ts)

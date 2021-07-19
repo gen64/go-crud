@@ -136,9 +136,6 @@ func TestValidationFields(t *testing.T) {
 
 	got2 := h.fieldsLength
 	want2 := map[string][2]int{"FirstName": {2, 30}, "LastName": {0, 255}, "PostCode": {6, -1}, "PostCode2": {6, -1}, "Key": {30, 255}}
-	/*if len(got2) != len(want2) {
-		t.Fatalf("Field lengths: want %v, got %v", len(want2), len(got2))
-	}*/
 	for _, v := range []string{"FirstName", "LastName", "PostCode", "PostCode2", "Key"} {
 		if len(got2[v]) != len(want2[v]) {
 			t.Fatalf("Field lengths: want %v, got %v", len(want2[v]), len(got2[v]))
@@ -163,9 +160,6 @@ func TestValidationFields(t *testing.T) {
 
 	got4 := h.fieldsValue
 	want4 := map[string][2]int{"Age": {0, 120}, "Price": {0, 999}}
-	/*if len(got4) != len(want4) {
-		t.Fatalf("Field values: want %v, got %v", len(want4), len(got4))
-	}*/
 	for _, v := range []string{"Age", "Price"} {
 		if len(got4[v]) != len(want4[v]) {
 			t.Fatalf("Field values: want %v, got %v", len(want4[v]), len(got4[v]))
@@ -179,9 +173,6 @@ func TestValidationFields(t *testing.T) {
 
 	got5 := h.fieldsValueNotNil
 	want5 := map[string][2]bool{"Age": {false, false}, "Price": {true, false}}
-	/*if len(got5) != len(want5) {
-		t.Fatalf("Field value not nils: want %v, got %v", len(want5), len(got5))
-	}*/
 	for _, v := range []string{"Age", "Price"} {
 		if len(got5[v]) != len(want5[v]) {
 			t.Fatalf("Field value not nils: want %v, got %v", len(want5[v]), len(got5[v]))

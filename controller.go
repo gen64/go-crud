@@ -315,7 +315,11 @@ func (c Controller) ResetFields(obj interface{}) {
 }
 
 // GetHTTPHandler returns a CRUD HTTP handler that can be attached to HTTP
-// server. It creates a CRUD endpoint for PUT, GET and DELETE methods.
+// server. It creates a CRUD endpoint for creating, reading, updating, deleting
+// and listing objects.
+// Each of the func() argument should be funcs that create new object (instance
+// of a struct). For each of the operation (create, read etc.), a different
+// struct with different fields can be used.
 // It's important to pass "uri" argument same as the one that the handler is
 // attached to.
 func (c Controller) GetHTTPHandler(uri string, newObjFunc func() interface{}, newObjCreateFunc func() interface{}, newObjReadFunc func() interface{}, newObjUpdateFunc func() interface{}, newObjDeleteFunc func() interface{}, newObjListFunc func() interface{}) func(http.ResponseWriter, *http.Request) {
@@ -518,7 +522,8 @@ func (c *Controller) validateFieldEmail(valueField reflect.Value) bool {
 	return emailRegex.MatchString(valueField.String())
 }
 
-// validateFieldRegExp checks if string field's value matches the regular expression
+// validateFieldRegExp checks if string field's value matches the regular
+// expression
 func (c *Controller) validateFieldRegExp(valueField reflect.Value, re *regexp.Regexp) bool {
 	if valueField.Type().Name() != "string" {
 		return true
